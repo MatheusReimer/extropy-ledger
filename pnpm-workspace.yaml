@@ -1,0 +1,20 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'infra'
+
+# Every dependency with an install script needs an explicit decision here, or
+# `pnpm install` exits non-zero — which would break the one-command setup the
+# brief asks for. Each entry below is a decision, not a rubber stamp.
+allowBuilds:
+  # Needed: esbuild's postinstall installs the platform binary. Without it the
+  # Vite build and the CDK bundling both fail with "esbuild not found".
+  esbuild: true
+
+  # Not needed: the published package only ships a no-op `preinstall` and a
+  # `prepare` that runs when installing from git, never from the registry.
+  '@google/genai': false
+
+  # Not needed: its postinstall only wires up protobufjs's own CLI, which
+  # nothing here uses — the SDK consumes the library API.
+  protobufjs: false

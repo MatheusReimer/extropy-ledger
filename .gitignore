@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# env — nunca commitar segredos (só .env.example)
+.env
+.env.*
+!.env.example
+
+# CDK
+cdk.out/
+.cdk.staging/
+
+# editores / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# testes
+coverage/

@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    // aws-cdk-lib is not authored under exactOptionalPropertyTypes: its
+    // interfaces declare `isWebsite: boolean` where the implementation supplies
+    // `boolean | undefined`, so passing a Bucket as an IBucket becomes a type
+    // error. Relaxed HERE ONLY - apps/ and packages/ keep the flag on, which is
+    // where it actually catches bugs in our own code.
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["bin", "lib"]
+}

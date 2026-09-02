@@ -1,0 +1,23 @@
+{
+  "name": "@expense/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/local.ts",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expense/shared": "workspace:*",
+    "@google/genai": "^2.20.0",
+    "groq-sdk": "^1.6.0",
+    "jose": "^6.1.0",
+    "mongodb": "^6.20.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.152",
+    "dotenv": "^17.2.3",
+    "tsx": "^4.20.6"
+  }
+}
