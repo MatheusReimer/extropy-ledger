@@ -75,7 +75,7 @@ export const en = {
 
   'saved.title': 'Expense added',
   'saved.hint': 'It is in your list below.',
-  'saved.landedIn': 'Dated in {month}, so it was added there — now showing that month.',
+  'saved.landedIn': 'Saved to {month}. Showing that month now.',
   'saved.addAnother': 'Add another',
 
   'receipt.dropTitle': 'Drag a receipt here',

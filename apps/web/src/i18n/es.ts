@@ -69,7 +69,7 @@ export const es: Dictionary = {
 
   'saved.title': 'Gasto anadido',
   'saved.hint': 'Esta en tu lista de abajo.',
-  'saved.landedIn': 'La fecha es de {month}, asi que se anadio alli — mostrando ese mes.',
+  'saved.landedIn': 'Guardado en {month}. Mostrando ese mes.',
   'saved.addAnother': 'Anadir otro',
 
   'receipt.dropTitle': 'Arrastra un recibo aqui',
