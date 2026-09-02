@@ -113,8 +113,11 @@ export function AuthPage() {
           A scrim, so the copy does not depend on where the gradient happens to
           crop. Measured on the artwork itself: the muted token this text used to
           wear ran 1.14:1 - invisible - and plain white is only 3.87:1 at the pale
-          end of the panel, which fails AA on a short window. Over this it is
-          7.4:1 everywhere.
+          end of the panel, which fails AA on a short window.
+          Re-measured against the receipt backdrop, whose ruled lines are lighter
+          than the gradient was: at 0.42 the LIGHTEST pixel under the copy gave
+          4.59:1 - passing, but with no margin on a texture that varies. 0.52
+          takes the worst case to 5.63:1.
         */}
         {/*
           The same ripples as the app's own rail. The panel was not too WIDE so
@@ -128,7 +131,7 @@ export function AuthPage() {
           inset="0"
           bgGradient="to-b"
           gradientFrom="rgba(34,28,22,0.10)"
-          gradientTo="rgba(34,28,22,0.42)"
+          gradientTo="rgba(34,28,22,0.52)"
           pointerEvents="none"
         />
         <Stack position="absolute" inset="0" p="9" justify="space-between">
