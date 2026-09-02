@@ -94,7 +94,16 @@ export function AuthPage() {
          */
         flex={{ lg: '0 0 32%', xl: '0 0 28%' }}
         position="relative"
-        backgroundImage="url('/sidebar-art.jpg')"
+        /*
+         * Receipts, thrown far out of focus.
+         *
+         * The panel was a bare gradient, and an abstract texture would have
+         * filled it without saying anything. Blurred till rolls say what the
+         * product is for before a word is read - and blurred hard enough that
+         * no line is legible, so it stays atmosphere rather than competing with
+         * the copy in front of it.
+         */
+        backgroundImage="url('/auth-art.jpg')"
         backgroundSize="cover"
         backgroundPosition="center"
         borderRightWidth="1px"
@@ -126,15 +135,16 @@ export function AuthPage() {
           <Brand size={30} />
           <Stack gap="3">
             <Text
-              fontSize="xl"
+              fontSize={{ lg: '2xl', xl: '3xl' }}
               fontWeight="semibold"
-              letterSpacing="-0.02em"
-              lineHeight="1.25"
+              letterSpacing="-0.025em"
+              lineHeight="1.15"
               color="bone.50"
+              textWrap="balance"
             >
               {t('auth.pitchTitle')}
             </Text>
-            <Text fontSize="sm" color="bone.100" lineHeight="1.6">
+            <Text fontSize={{ lg: 'sm', xl: 'md' }} color="bone.100" lineHeight="1.65">
               {t('auth.pitchBody')}
             </Text>
           </Stack>
