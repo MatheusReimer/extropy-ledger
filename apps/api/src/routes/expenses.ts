@@ -5,12 +5,11 @@ import {
   updateExpenseSchema,
   type ExpenseDto,
 } from '@expense/shared';
-import { ObjectId, type Filter } from 'mongodb';
-import { getCollections } from '../db/client.js';
+import { ObjectId } from 'mongodb';
 import { toExpenseDto } from '../db/mappers.js';
-import type { ExpenseDoc } from '../db/types.js';
 import { badRequest, notFound } from '../http/errors.js';
 import type { AuthedHandler } from '../http/types.js';
+import type { Repositories } from '../db/repositories/types.js';
 import { parseInput } from '../http/validate.js';
 import { toObjectId } from '../lib/ids.js';
 import type { CurrencyCode } from '@expense/shared';
@@ -24,50 +23,43 @@ import { toBaseCents } from '../lib/rates.js';
  * expense would be created pointing at somebody else's category, and the report
  * would start showing a name its owner never created. A cross-tenant reference
  * is write-side IDOR.
+ *
+ * The repository is already bound to the caller, so `exists` cannot answer for
+ * anybody else - the scope is not this function's to get wrong.
  */
-async function assertCategoryOwned(categoryId: ObjectId, userId: ObjectId): Promise<void> {
-  const { categories } = await getCollections();
-  const owned = await categories.findOne({ _id: categoryId, userId }, { projection: { _id: 1 } });
-  if (!owned) throw badRequest('Unknown category');
+async function assertCategoryOwned(
+  categories: Repositories['categories'],
+  categoryId: ObjectId,
+): Promise<void> {
+  if (!(await categories.exists(categoryId))) throw badRequest('Unknown category');
 }
 
 export const listExpenses: AuthedHandler = async (request) => {
   const query = parseInput(listExpensesQuerySchema, request.query);
-  const { expenses } = await getCollections();
 
-  // `date` is `YYYY-MM-DD`, so the range is a string comparison - and it uses the
-  // { userId, date } index directly, with no conversion.
-  const dateFilter = {
-    ...(query.from ? { $gte: query.from } : {}),
-    ...(query.to ? { $lte: query.to } : {}),
-  };
+  const docs = await request.repos.expenses.list({
+    from: query.from,
+    to: query.to,
+    categoryId: query.categoryId ? toObjectId(query.categoryId, 'categoryId') : undefined,
+    limit: query.limit,
+  });
 
-  const filter: Filter<ExpenseDoc> = {
-    userId: toObjectId(request.userId),
-    ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
-    ...(query.categoryId ? { categoryId: toObjectId(query.categoryId, 'categoryId') } : {}),
-  };
-
-  const docs = await expenses
-    .find(filter)
-    .sort({ date: -1, createdAt: -1 })
-    .limit(query.limit)
-    .toArray();
   const body: ExpenseDto[] = docs.map(toExpenseDto);
   return { status: 200, body };
 };
 
 export const createExpense: AuthedHandler = async (request) => {
   const input = parseInput(createExpenseSchema, request.body);
+  // Still needed to STAMP the document; reads are scoped by the repository.
   const userId = toObjectId(request.userId);
   const categoryId = toObjectId(input.categoryId, 'categoryId');
-  await assertCategoryOwned(categoryId, userId);
+  await assertCategoryOwned(request.repos.categories, categoryId);
 
   // A receipt id from another account simply does not attach - the expense is
   // still created, minus the link. Refusing the whole write would let someone
   // probe for valid ids by watching which requests fail.
   const receiptId = input.receiptId
-    ? await claimReceipt(toObjectId(input.receiptId, 'receiptId'), userId)
+    ? await claimReceipt(request.repos.receipts, toObjectId(input.receiptId, 'receiptId'))
     : undefined;
 
   /**
@@ -100,20 +92,16 @@ export const createExpense: AuthedHandler = async (request) => {
     ...(receiptId ? { receiptId } : {}),
   };
 
-  const { expenses } = await getCollections();
-  await expenses.insertOne(doc);
+  await request.repos.expenses.insert(doc);
   return { status: 201, body: toExpenseDto(doc) };
 };
 
 export const updateExpense: AuthedHandler = async (request) => {
   const input = parseInput(updateExpenseSchema, request.body);
-  const userId = toObjectId(request.userId);
   const expenseId = toObjectId(request.params['id'] ?? '');
 
   const categoryId = input.categoryId ? toObjectId(input.categoryId, 'categoryId') : undefined;
-  if (categoryId) await assertCategoryOwned(categoryId, userId);
-
-  const { expenses } = await getCollections();
+  if (categoryId) await assertCategoryOwned(request.repos.categories, categoryId);
 
   /**
    * Re-convert when any input to the conversion changed.
@@ -122,7 +110,7 @@ export const updateExpense: AuthedHandler = async (request) => {
    * `baseCents` behind would make the row and the report disagree, which is the
    * hardest kind of bug to spot because both numbers look plausible.
    */
-  const existing = await expenses.findOne({ _id: expenseId, userId });
+  const existing = await request.repos.expenses.findById(expenseId);
   if (!existing) throw notFound('Expense not found');
 
   const touchesConversion =
@@ -149,32 +137,21 @@ export const updateExpense: AuthedHandler = async (request) => {
       : {}),
     updatedAt: new Date(),
   };
-  // `userId` goes in the FILTER, not in a check beforehand: that is what turns an
-  // update against someone else's expense into a 404 rather than a silent success.
-  const updated = await expenses.findOneAndUpdate(
-    { _id: expenseId, userId },
-    { $set: changes },
-    { returnDocument: 'after' },
-  );
-
+  // The repository puts `userId` in the FILTER, which is what turns an update
+  // against someone else's expense into a 404 rather than a silent success.
+  const updated = await request.repos.expenses.update(expenseId, changes);
   if (!updated) throw notFound('Expense not found');
   return { status: 200, body: toExpenseDto(updated) };
 };
 
 export const deleteExpense: AuthedHandler = async (request) => {
-  const { expenses, receipts } = await getCollections();
-  const userId = toObjectId(request.userId);
-  const removed = await expenses.findOneAndDelete({
-    _id: toObjectId(request.params['id'] ?? ''),
-    userId,
-  });
-
+  const removed = await request.repos.expenses.remove(toObjectId(request.params['id'] ?? ''));
   if (!removed) throw notFound('Expense not found');
 
   // Deleting the expense deletes its document too. Keeping an orphaned image of
   // someone's restaurant bill after they asked for the record to go is the kind
   // of retention nobody agreed to.
-  if (removed.receiptId) await receipts.deleteOne({ _id: removed.receiptId, userId });
+  if (removed.receiptId) await request.repos.receipts.remove(removed.receiptId);
 
   return { status: 204 };
 };

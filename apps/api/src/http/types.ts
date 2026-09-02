@@ -1,3 +1,5 @@
+import type { Repositories } from '../db/repositories/types.js';
+
 /**
  * Transport-independent request and response shapes.
  *
@@ -22,8 +24,17 @@ export type HttpResponse = {
 
 export type Handler = (request: HttpRequest) => Promise<HttpResponse>;
 
-/** An authenticated request - `userId` only exists after the middleware. */
-export type AuthedRequest = HttpRequest & { readonly userId: string };
+/**
+ * An authenticated request - `userId` and `repos` only exist after the middleware.
+ *
+ * `repos` is the persistence surface already bound to `userId`. Handlers get
+ * their database access through it and never open a collection themselves, which
+ * is what makes an unscoped query unwritable rather than merely discouraged.
+ */
+export type AuthedRequest = HttpRequest & {
+  readonly userId: string;
+  readonly repos: Repositories;
+};
 
 export type AuthedHandler = (request: AuthedRequest) => Promise<HttpResponse>;
 

@@ -1,8 +1,8 @@
 import { Binary, ObjectId } from 'mongodb';
 import type { ReceiptDto, ReceiptMimeType } from '@expense/shared';
-import { getCollections } from '../db/client.js';
 import { notFound } from '../http/errors.js';
 import type { AuthedHandler } from '../http/types.js';
+import type { Repositories } from '../db/repositories/types.js';
 import { toObjectId } from '../lib/ids.js';
 
 /**
@@ -16,11 +16,11 @@ const UNCLAIMED_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Stores an upload and hands back the id an expense can later claim. */
 export async function storeReceipt(
+  repos: Repositories,
   userId: ObjectId,
   file: { bytes: Buffer; mimeType: ReceiptMimeType },
   fileName: string,
 ): Promise<ObjectId> {
-  const { receipts } = await getCollections();
   const doc = {
     _id: new ObjectId(),
     userId,
@@ -34,7 +34,7 @@ export async function storeReceipt(
     createdAt: new Date(),
     expiresAt: new Date(Date.now() + UNCLAIMED_TTL_MS),
   };
-  await receipts.insertOne(doc);
+  await repos.receipts.insert(doc);
   return doc._id;
 }
 
@@ -49,16 +49,10 @@ export async function storeReceipt(
  * document - the TTL index only sees fields that are set.
  */
 export async function claimReceipt(
+  receipts: Repositories['receipts'],
   receiptId: ObjectId,
-  userId: ObjectId,
 ): Promise<ObjectId | undefined> {
-  const { receipts } = await getCollections();
-  const claimed = await receipts.findOneAndUpdate(
-    { _id: receiptId, userId },
-    { $unset: { expiresAt: '' } },
-    { returnDocument: 'after', projection: { _id: 1 } },
-  );
-  return claimed?._id;
+  return (await receipts.claim(receiptId)) ? receiptId : undefined;
 }
 
 /**
@@ -71,12 +65,7 @@ export async function claimReceipt(
  * identically in both places. The client turns it back into a data URL.
  */
 export const getReceipt: AuthedHandler = async (request) => {
-  const { receipts } = await getCollections();
-  const doc = await receipts.findOne({
-    _id: toObjectId(request.params['id'] ?? ''),
-    userId: toObjectId(request.userId),
-  });
-
+  const doc = await request.repos.receipts.findById(toObjectId(request.params['id'] ?? ''));
   if (!doc) throw notFound('Receipt not found');
 
   const body: ReceiptDto = {

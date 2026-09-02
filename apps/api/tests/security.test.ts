@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpError } from '../src/http/errors.js';
+import { fakeRepositories } from './helpers/fake-repositories.js';
 import { requireAuth } from '../src/middleware/auth.js';
 import { signAccessToken, verifyAccessToken } from '../src/lib/jwt.js';
 import { hashPassword, verifyPassword } from '../src/lib/password.js';
@@ -66,24 +67,28 @@ describe('access tokens', () => {
 
 describe('requireAuth', () => {
   const passthrough = vi.fn(async (authed: AuthedRequest) => ({ status: 200, body: authed.userId }));
+  // No database: the middleware takes its repository factory as a parameter.
+  const fakeRepos = async () => fakeRepositories();
 
   it('passes the verified userId to the handler', async () => {
     const token = await signAccessToken('507f1f77bcf86cd799439011');
-    const response = await requireAuth(passthrough)(request({ authorization: `Bearer ${token}` }));
+    const response = await requireAuth(passthrough, fakeRepos)(
+      request({ authorization: `Bearer ${token}` }),
+    );
     expect(response.body).toBe('507f1f77bcf86cd799439011');
   });
 
   it('rejects a request with no Authorization header', async () => {
-    await expect(requireAuth(passthrough)(request())).rejects.toMatchObject({ status: 401 });
+    await expect(requireAuth(passthrough, fakeRepos)(request())).rejects.toMatchObject({ status: 401 });
   });
 
   it('rejects a header that is not a bearer token', async () => {
-    const promise = requireAuth(passthrough)(request({ authorization: 'Basic abc123' }));
+    const promise = requireAuth(passthrough, fakeRepos)(request({ authorization: 'Basic abc123' }));
     await expect(promise).rejects.toBeInstanceOf(HttpError);
   });
 
   it('rejects a forged token', async () => {
-    const promise = requireAuth(passthrough)(request({ authorization: 'Bearer a.b.c' }));
+    const promise = requireAuth(passthrough, fakeRepos)(request({ authorization: 'Bearer a.b.c' }));
     await expect(promise).rejects.toMatchObject({ status: 401 });
   });
 });

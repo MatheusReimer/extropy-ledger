@@ -1,12 +1,10 @@
 import { CURRENCIES, LOCALES, type UserDto } from '@expense/shared';
 import { z } from 'zod';
-import { getCollections } from '../db/client.js';
 import { toUserDto } from '../db/mappers.js';
 import { notFound } from '../http/errors.js';
 import type { AuthedHandler } from '../http/types.js';
 import { parseInput } from '../http/validate.js';
 import { getRate } from '../lib/rates.js';
-import { toObjectId } from '../lib/ids.js';
 import { BASE_CURRENCY, isCurrency } from '@expense/shared';
 
 /**
@@ -31,14 +29,7 @@ const preferencesSchema = z
  */
 export const updatePreferences: AuthedHandler = async (request) => {
   const input = parseInput(preferencesSchema, request.body);
-  const { users } = await getCollections();
-
-  const updated = await users.findOneAndUpdate(
-    { _id: toObjectId(request.userId) },
-    { $set: input },
-    { returnDocument: 'after' },
-  );
-
+  const updated = await request.repos.user.updatePreferences(input);
   if (!updated) throw notFound('Account not found');
 
   const body: UserDto = toUserDto(updated);

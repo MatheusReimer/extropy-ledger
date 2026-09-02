@@ -5,7 +5,6 @@ import { decodeUpload } from '../lib/files.js';
 import { HttpError, unprocessable } from '../http/errors.js';
 import { storeReceipt } from './receipts.js';
 import { categorize } from '../ai/categorize.js';
-import { getCollections } from '../db/client.js';
 import type { AuthedHandler } from '../http/types.js';
 import { parseInput } from '../http/validate.js';
 import { toObjectId } from '../lib/ids.js';
@@ -20,12 +19,8 @@ import { toObjectId } from '../lib/ids.js';
  */
 export const categorizeExpense: AuthedHandler = async (request) => {
   const input = parseInput(categorizeRequestSchema, request.body);
-  const { categories } = await getCollections();
 
-  const docs = await categories
-    .find({ userId: toObjectId(request.userId) })
-    .project<{ name: string }>({ name: 1 })
-    .toArray();
+  const docs = await request.repos.categories.list();
   const names = docs.map((doc) => doc.name);
 
   const result = await categorize(input, names, { askModel });
@@ -51,16 +46,13 @@ export const extractExpenseFromReceipt: AuthedHandler = async (request) => {
   if (!decoded.ok) throw unprocessable({ file: decoded.reason });
 
   const userId = toObjectId(request.userId);
-  const { categories } = await getCollections();
-  const docs = await categories
-    .find({ userId })
-    .project<{ name: string }>({ name: 1 })
-    .toArray();
+  const docs = await request.repos.categories.list();
 
   // Stored before the model is asked, so the id exists regardless of how the
   // read goes. An upload nobody saves is swept by the TTL index rather than
   // needing a rollback path here.
   const receiptId = await storeReceipt(
+    request.repos,
     userId,
     { bytes: decoded.bytes, mimeType: decoded.mimeType },
     input.fileName,
