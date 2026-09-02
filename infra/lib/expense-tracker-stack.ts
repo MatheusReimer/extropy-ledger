@@ -58,6 +58,22 @@ export class ExpenseTrackerStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
+    /**
+     * Whether to skip CloudFront and let the Lambda serve the site itself.
+     *
+     * Set with `-c lambdaOnly=true`. It exists because a new AWS account cannot
+     * create CloudFront distributions until AWS verifies it - a hold that can
+     * take a day - and a deployed app with no URL is worth less than a slightly
+     * inefficient one. API Gateway still provides real HTTPS on its own domain,
+     * so nothing is served over plain HTTP.
+     *
+     * The cost is honest: every asset request wakes a Lambda rather than hitting
+     * an edge cache. Fine for a demo, wrong for traffic - which is why it is a
+     * flag and not the default.
+     */
+    const lambdaOnly = this.node.tryGetContext('lambdaOnly') === 'true';
+    const sitePath = path.join(repoRoot, 'apps/web/dist');
+
     const api = new NodejsFunction(this, 'ApiFunction', {
       entry: path.join(repoRoot, 'apps/api/src/lambda.ts'),
       handler: 'handler',
@@ -69,7 +85,13 @@ export class ExpenseTrackerStack extends Stack {
       // going higher: receipt extraction runs 1-5 s healthy, but a congested
       // free tier has been measured at 17 s, and the request budget is 25 s.
       timeout: Duration.seconds(30),
-      environment: { NODE_OPTIONS: '--enable-source-maps', ...props.apiEnvironment },
+      environment: {
+        NODE_OPTIONS: '--enable-source-maps',
+        // Unset unless this is the CloudFront-less variant; the static handler
+        // in the API keys off exactly this.
+        ...(lambdaOnly ? { SERVE_STATIC_DIR: '/var/task/site' } : {}),
+        ...props.apiEnvironment,
+      },
       logGroup: apiLogs,
       bundling: {
         format: OutputFormat.ESM,
@@ -79,6 +101,22 @@ export class ExpenseTrackerStack extends Stack {
         // Some packages still call require() internally; without this banner the
         // ESM bundle fails at runtime with "require is not defined".
         banner: "import{createRequire}from'module';const require=createRequire(import.meta.url);",
+        // Copies the built site in beside the handler. esbuild has no idea these
+        // files exist - they are read at runtime, never imported.
+        ...(lambdaOnly
+          ? {
+              commandHooks: {
+                beforeBundling: () => [],
+                beforeInstall: () => [],
+                afterBundling: (_input: string, output: string) => [
+                  // Source maps are excluded: the static handler will not serve
+                  // them anyway (`.map` is not a recognised type), and they are
+                  // five of the seven megabytes - paid on every cold start.
+                  `node -e "const f=require('node:fs');f.cpSync(process.argv[1],process.argv[2],{recursive:true,filter:(s)=>!s.endsWith('.map')})" "${sitePath}" "${output}/site"`,
+                ],
+              },
+            }
+          : {}),
       },
     });
 
@@ -93,71 +131,85 @@ export class ExpenseTrackerStack extends Stack {
       integration: new HttpLambdaIntegration('ProxyIntegration', api),
     });
 
-    const siteBucket = new s3.Bucket(this, 'SiteBucket', {
-      // Never public: access is only through CloudFront's Origin Access Control.
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
     /**
-     * Rewriting /api/* to /* at the edge.
-     *
-     * Without this the frontend would need the API Gateway URL at BUILD time,
-     * and that URL only exists after the deploy - the classic chicken-and-egg
-     * usually solved with two deploys or a custom domain. Serving the API under
-     * the site's own host makes VITE_API_URL just "/api" and the problem
-     * disappears: one origin, no CORS in production, one deploy.
+     * Everything below is the CloudFront path, and it is skipped entirely when
+     * the Lambda is serving the site itself. Two shapes, one stack: the fallback
+     * is a flag rather than a fork of the infrastructure, so it cannot rot in a
+     * branch nobody deploys.
      */
-    const stripApiPrefix = new cloudfront.Function(this, 'StripApiPrefix', {
-      code: cloudfront.FunctionCode.fromInline(STRIP_API_PREFIX),
-      runtime: cloudfront.FunctionRuntime.JS_2_0,
-    });
+    let siteHost: string;
 
-    const apiDomain = `${httpApi.apiId}.execute-api.${this.region}.${this.urlSuffix}`;
+    if (lambdaOnly) {
+      siteHost = httpApi.apiEndpoint;
+    } else {
+      const siteBucket = new s3.Bucket(this, 'SiteBucket', {
+        // Never public: access is only through CloudFront's Origin Access Control.
+        blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        encryption: s3.BucketEncryption.S3_MANAGED,
+        enforceSSL: true,
+        removalPolicy: RemovalPolicy.DESTROY,
+        autoDeleteObjects: true,
+      });
 
-    const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
-      defaultRootObject: 'index.html',
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-      },
-      additionalBehaviors: {
-        '/api/*': {
-          origin: new origins.HttpOrigin(apiDomain),
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          // API responses are per-user - caching them would serve one person's
-          // expenses to another. The Host header has to be stripped, or API
-          // Gateway rejects the request for not recognising the CloudFront domain.
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-          functionAssociations: [
-            { function: stripApiPrefix, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
-          ],
+      /**
+       * Rewriting /api/* to /* at the edge.
+       *
+       * Without this the frontend would need the API Gateway URL at BUILD time,
+       * and that URL only exists after the deploy - the classic chicken-and-egg
+       * usually solved with two deploys or a custom domain. Serving the API under
+       * the site's own host makes VITE_API_URL just "/api" and the problem
+       * disappears: one origin, no CORS in production, one deploy.
+       */
+      const stripApiPrefix = new cloudfront.Function(this, 'StripApiPrefix', {
+        code: cloudfront.FunctionCode.fromInline(STRIP_API_PREFIX),
+        runtime: cloudfront.FunctionRuntime.JS_2_0,
+      });
+
+      const apiDomain = `${httpApi.apiId}.execute-api.${this.region}.${this.urlSuffix}`;
+
+      const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
+        defaultRootObject: 'index.html',
+        defaultBehavior: {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         },
-      },
-      // SPA: a client-side path is not an object in S3, so 403/404 return the
-      // index and the app resolves the route itself.
-      errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
-      ],
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
-    });
+        additionalBehaviors: {
+          '/api/*': {
+            origin: new origins.HttpOrigin(apiDomain),
+            viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+            allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+            // API responses are per-user - caching them would serve one person's
+            // expenses to another. The Host header has to be stripped, or API
+            // Gateway rejects the request for not recognising the CloudFront domain.
+            cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+            originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            functionAssociations: [
+              { function: stripApiPrefix, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
+            ],
+          },
+        },
+        // SPA: a client-side path is not an object in S3, so 403/404 return the
+        // index and the app resolves the route itself.
+        errorResponses: [
+          { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
+          { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' },
+        ],
+        priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      });
 
-    new BucketDeployment(this, 'SiteDeployment', {
-      sources: [Source.asset(path.join(repoRoot, 'apps/web/dist'))],
-      destinationBucket: siteBucket,
-      distribution,
-      // Without invalidation the deploy succeeds and users keep the old bundle.
-      distributionPaths: ['/*'],
-    });
+      new BucketDeployment(this, 'SiteDeployment', {
+        sources: [Source.asset(path.join(repoRoot, 'apps/web/dist'))],
+        destinationBucket: siteBucket,
+        distribution,
+        // Without invalidation the deploy succeeds and users keep the old bundle.
+        distributionPaths: ['/*'],
+      });
 
-    new CfnOutput(this, 'WebUrl', { value: `https://${distribution.distributionDomainName}` });
-    new CfnOutput(this, 'ApiUrl', { value: `https://${distribution.distributionDomainName}/api` });
+      siteHost = `https://${distribution.distributionDomainName}`;
+    }
+
+    new CfnOutput(this, 'WebUrl', { value: siteHost });
+    new CfnOutput(this, 'ApiUrl', { value: `${siteHost}/api` });
     new CfnOutput(this, 'ApiGatewayUrl', { value: httpApi.apiEndpoint });
   }
 }

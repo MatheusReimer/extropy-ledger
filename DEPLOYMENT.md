@@ -4,7 +4,31 @@ Status, what is already done, and the one thing currently blocking a live URL.
 
 ---
 
-## Status: blocked on an AWS account hold, not on this repository
+## Status: deployed, in the Lambda-served variant
+
+**Live: https://k7dptwm6x7.execute-api.us-east-1.amazonaws.com**
+
+CloudFront is still held (see below), so the deploy runs with `-c lambdaOnly=true`: the same
+Lambda that serves the API also serves the built site, and API Gateway supplies HTTPS on its own
+domain. Verified in production - signup, category seeding, expense create, summary, budget,
+delete and the auth rejection all pass against the real Atlas cluster, with warm requests
+between 0.4 s and 0.8 s.
+
+```bash
+pnpm build && cd infra && npx cdk deploy -c lambdaOnly=true
+```
+
+**What it costs, stated plainly.** Every asset request wakes a Lambda instead of hitting an edge
+cache, so first paint is slower and each file is an invocation. For a demo that is invisible;
+for real traffic it would be the wrong answer. The site bundle is 1.2 MB with source maps
+excluded - they would be five of seven megabytes, paid on every cold start, and the static
+handler refuses to serve `.map` anyway.
+
+**Switching back is one flag.** Drop `-c lambdaOnly=true` once CloudFront clears and the stack
+builds the S3 + CloudFront shape instead. Both live in one stack rather than a branch, so the
+fallback cannot rot unused.
+
+## The CloudFront hold, still open
 
 `pnpm deploy` reaches CloudFormation, creates fourteen resources, and fails on the fifteenth —
 the CloudFront distribution:
@@ -55,7 +79,11 @@ region, and the Request ID from the error above.
 There is no published SLA on Basic support. In practice this class of case is usually answered
 within hours, occasionally up to a day or two.
 
-**Once it clears, the retry is one command — `pnpm deploy`. Nothing in this repository changes.**
+**Once it clears, `pnpm deploy` (without the flag) moves to the CloudFront shape.** Nothing in
+the application changes - only which resources the stack creates.
+
+Attempted twice so far; the second attempt returned the identical error with Request ID
+`bdf41366-8486-4bfd-89c0-0cd2d313aea6`.
 
 ---
 

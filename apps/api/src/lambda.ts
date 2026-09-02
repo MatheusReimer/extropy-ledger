@@ -3,6 +3,7 @@ import { getConfig } from './config.js';
 import { resolveCorsHeaders } from './http/cors.js';
 import { toErrorResponse } from './http/errors.js';
 import { createDispatcher } from './http/router.js';
+import { serveStatic } from './http/static.js';
 import { describeError, logger } from './lib/logger.js';
 import { routes } from './routes/index.js';
 
@@ -14,6 +15,30 @@ import { routes } from './routes/index.js';
  * same code that ships to production.
  */
 const dispatch = createDispatcher(routes);
+
+/**
+ * Where the built site lives, when this Lambda is also serving it.
+ *
+ * Unset in the normal deployment: CloudFront serves the site from S3 and strips
+ * the `/api` prefix at the edge, so this Lambda only ever sees API paths. Set,
+ * and the same function answers for both - see `http/static.ts` for why that
+ * exists and what it costs.
+ */
+const STATIC_DIR = process.env['SERVE_STATIC_DIR'];
+
+/**
+ * The API lives under `/api` from the browser's point of view either way.
+ *
+ * CloudFront strips that prefix before the request arrives; without CloudFront
+ * nothing does, so it is stripped here. Doing it unconditionally is safe - a
+ * stripped path never starts with `/api` again - and it keeps one rule instead
+ * of two deployment-shaped behaviours.
+ */
+const apiPath = (rawPath: string): string | undefined => {
+  if (!STATIC_DIR) return rawPath;
+  if (rawPath === '/api') return '/';
+  return rawPath.startsWith('/api/') ? rawPath.slice(4) : undefined;
+};
 
 const decodeBody = (event: APIGatewayProxyEventV2): string | undefined =>
   event.isBase64Encoded && event.body
@@ -33,9 +58,26 @@ export const handler = async (
     // A preflight should touch neither the database nor a route - answer and exit.
     if (method === 'OPTIONS') return { statusCode: 204, headers: corsHeaders };
 
+    const routePath = apiPath(event.rawPath);
+
+    // Not an API path, and we are serving the site: it is a page or an asset.
+    if (routePath === undefined && STATIC_DIR) {
+      const asset = await serveStatic(STATIC_DIR, event.rawPath);
+      if (asset) {
+        const { 'X-Base64': base64, ...headers } = asset.headers ?? {};
+        return {
+          statusCode: asset.status,
+          headers,
+          body: String(asset.body),
+          ...(base64 ? { isBase64Encoded: true } : {}),
+        };
+      }
+      return { statusCode: 404, headers: { 'Content-Type': 'text/plain' }, body: 'Not found' };
+    }
+
     const response = await dispatch({
       method,
-      path: event.rawPath,
+      path: routePath ?? event.rawPath,
       query: event.queryStringParameters
         ? Object.fromEntries(
             Object.entries(event.queryStringParameters).filter(
