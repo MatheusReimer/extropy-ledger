@@ -74,7 +74,8 @@ export const pt: Dictionary = {
 
   'saved.title': 'Despesa adicionada',
   'saved.hint': 'Ela esta na sua lista abaixo.',
-  'saved.landedIn': 'Salva em {month}. Mostrando esse mes.',
+  'saved.pastMonth': 'Mes anterior',
+  'saved.landedIn': 'Data de {month}. Mostrando esse mes.',
   'saved.addAnother': 'Adicionar outra',
 
   'receipt.dropTitle': 'Arraste um recibo aqui',

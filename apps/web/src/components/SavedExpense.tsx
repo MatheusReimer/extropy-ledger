@@ -59,9 +59,22 @@ export function SavedExpense({
       animationFillMode="backwards"
     >
       <Stack gap="1">
-        <Text fontSize="xs" fontWeight="semibold" letterSpacing="0.08em" textTransform="uppercase" color="accent">
-          {t('saved.title')}
-        </Text>
+        <HStack gap="1.5" fontSize="xs" fontWeight="semibold" letterSpacing="0.08em" textTransform="uppercase">
+          <Text color="accent">{t('saved.title')}</Text>
+          {/*
+            The flag rides on the header rather than replacing the body line, so
+            the normal case reads exactly as before and the unusual one is
+            marked without becoming an error.
+          */}
+          {landedInMonth ? (
+            <>
+              <Text color="fg.subtle" aria-hidden="true">
+                ·
+              </Text>
+              <Text color="fg.muted">{t('saved.pastMonth')}</Text>
+            </>
+          ) : null}
+        </HStack>
         {/*
           A receipt dated last month creates a LAST MONTH expense, so this
           month's totals correctly do not move. Saying nothing makes that look
@@ -69,7 +82,7 @@ export function SavedExpense({
           reads zero. The page follows the money, and this says so out loud
           rather than leaving the reader to work out why the month changed.
         */}
-        <Text fontSize="sm" color={landedInMonth ? 'accent' : 'fg.muted'}>
+        <Text fontSize="sm" color="fg.muted">
           {landedInMonth ? t('saved.landedIn', { month: landedInMonth }) : t('saved.hint')}
         </Text>
       </Stack>

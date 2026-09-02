@@ -127,8 +127,16 @@ export function OverviewView({
         {summary.isError ? <ErrorState error={summary.error} /> : null}
         {summary.isPending ? <LoadingState label={t('state.buildingReport')} /> : null}
 
+        {/*
+          Only the STAT CARDS need the month's summary.
+          
+          This gate used to wrap everything below it as well, which meant that
+          switching to a month whose summary was not yet cached unmounted the
+          expense form mid-flight - taking the "expense added" confirmation with
+          it, seconds after it appeared. A form has no business disappearing
+          because a report is loading.
+        */}
         {data ? (
-          <>
             <Rise>
             <StatRow>
               <StatCard
@@ -155,6 +163,7 @@ export function OverviewView({
               />
             </StatRow>
             </Rise>
+        ) : null}
 
             <Rise delay={70}>
             <Grid
@@ -295,8 +304,6 @@ export function OverviewView({
               </Stack>
             </Panel>
             </Rise>
-          </>
-        ) : null}
       </Stack>
       <ReceiptViewer expense={viewing} onClose={() => setViewing(undefined)} />
     </>
