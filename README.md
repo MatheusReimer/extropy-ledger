@@ -12,6 +12,7 @@ Built for the Extropy full-stack home challenge: **Option 1 (Personal Expense Tr
 | **Repository** | https://github.com/MatheusReimer/extropy-ledger |
 | **Live app** | `https://<distribution>.cloudfront.net` *(fill in after `pnpm deploy`)* |
 | **API** | `https://<distribution>.cloudfront.net/api` — same host as the app, on purpose |
+| **Deploy status** | See [DEPLOYMENT.md](DEPLOYMENT.md) — bootstrapped and ready; the live URL is waiting on an AWS new-account hold on CloudFront distributions, not on this repository. |
 
 ---
 
