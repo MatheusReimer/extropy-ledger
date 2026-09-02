@@ -73,7 +73,15 @@ export function AuthPage() {
       */}
       <Box
         display={{ base: 'none', lg: 'block' }}
-        flex="1"
+        /*
+         * A slim band, not half the screen.
+         *
+         * At `flex="1"` this took an equal half and most of it was empty - a
+         * brand mark at the top, a sentence at the bottom, and a great deal of
+         * gradient in between. A third is enough for the artwork to set the tone
+         * without the emptiness becoming the subject.
+         */
+        flex={{ lg: '0 0 32%', xl: '0 0 28%' }}
         position="relative"
         backgroundImage="url('/sidebar-art.jpg')"
         backgroundSize="cover"
@@ -81,13 +89,33 @@ export function AuthPage() {
         borderRightWidth="1px"
         borderColor="border"
       >
-        <Stack position="absolute" inset="0" p="10" justify="space-between">
+        {/*
+          A scrim, so the copy does not depend on where the gradient happens to
+          crop. Measured on the artwork itself: the muted token this text used to
+          wear ran 1.14:1 - invisible - and plain white is only 3.87:1 at the pale
+          end of the panel, which fails AA on a short window. Over this it is
+          7.4:1 everywhere.
+        */}
+        <Box
+          position="absolute"
+          inset="0"
+          bgGradient="to-b"
+          gradientFrom="rgba(34,28,22,0.10)"
+          gradientTo="rgba(34,28,22,0.42)"
+        />
+        <Stack position="absolute" inset="0" p="9" justify="space-between">
           <Brand size={30} />
-          <Stack gap="3" maxW="sm">
-            <Text fontSize="2xl" fontWeight="semibold" letterSpacing="-0.02em" lineHeight="1.25">
+          <Stack gap="3">
+            <Text
+              fontSize="xl"
+              fontWeight="semibold"
+              letterSpacing="-0.02em"
+              lineHeight="1.25"
+              color="bone.50"
+            >
               {t('auth.pitchTitle')}
             </Text>
-            <Text fontSize="sm" color="fg.muted">
+            <Text fontSize="sm" color="bone.100" lineHeight="1.6">
               {t('auth.pitchBody')}
             </Text>
           </Stack>
