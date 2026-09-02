@@ -1,6 +1,14 @@
 import { useState, type FormEvent } from 'react';
-import { Box, Button, Field, Flex, Input, Stack, Text } from '@chakra-ui/react';
-import { loginSchema, parseOrFieldErrors, signupSchema, type FieldErrors } from '@expense/shared';
+import { Box, Button, Field, Flex, Input, NativeSelect, Stack, Text } from '@chakra-ui/react';
+import {
+  LOCALE_LABELS,
+  LOCALES,
+  loginSchema,
+  parseOrFieldErrors,
+  signupSchema,
+  type FieldErrors,
+  type Locale,
+} from '@expense/shared';
 import { useLogin, useSignup } from '../api/hooks';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -10,6 +18,8 @@ import {
 } from '../components';
 
 import { useT } from '../i18n';
+import { useLocalePreference } from '../i18n/preference';
+import { SidebarWaves } from '../components/SidebarWaves';
 
 type Mode = 'login' | 'signup';
 
@@ -24,6 +34,7 @@ type Mode = 'login' | 'signup';
  */
 export function AuthPage() {
   const t = useT();
+  const { locale: preferredLocale, setLocale: setPreferredLocale } = useLocalePreference();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -96,12 +107,20 @@ export function AuthPage() {
           end of the panel, which fails AA on a short window. Over this it is
           7.4:1 everywhere.
         */}
+        {/*
+          The same ripples as the app's own rail. The panel was not too WIDE so
+          much as too empty - a mark at the top, a sentence at the bottom, and a
+          motionless gradient between them. Motion is what makes the space read
+          as composed rather than unfinished.
+        */}
+        <SidebarWaves />
         <Box
           position="absolute"
           inset="0"
           bgGradient="to-b"
           gradientFrom="rgba(34,28,22,0.10)"
           gradientTo="rgba(34,28,22,0.42)"
+          pointerEvents="none"
         />
         <Stack position="absolute" inset="0" p="9" justify="space-between">
           <Brand size={30} />
@@ -122,7 +141,31 @@ export function AuthPage() {
         </Stack>
       </Box>
 
-      <Flex flex="1" align="center" justify="center" px="4" py="10" minW="0">
+      <Flex flex="1" align="center" justify="center" px="4" py="10" minW="0" position="relative">
+        {/*
+          The one screen a non-English speaker most needs their own language is
+          the one they see before they have an account to store a preference in.
+          Signed out there is no user to ask, so this writes to the device and
+          the choice survives into the session.
+        */}
+        <Box position="absolute" top="4" right="4">
+          <NativeSelect.Root size="xs" width="32">
+            <NativeSelect.Field
+              aria-label={t('settings.language')}
+              borderRadius="control"
+              bg="bg.panel"
+              value={preferredLocale}
+              onChange={(event) => setPreferredLocale(event.target.value as Locale)}
+            >
+              {LOCALES.map((locale) => (
+                <option key={locale} value={locale}>
+                  {LOCALE_LABELS[locale]}
+                </option>
+              ))}
+            </NativeSelect.Field>
+            <NativeSelect.Indicator />
+          </NativeSelect.Root>
+        </Box>
       <Rise>
       <Stack gap="8" w="full" maxW="sm">
         <Stack gap="5" align="center" textAlign="center">

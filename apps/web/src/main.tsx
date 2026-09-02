@@ -7,6 +7,7 @@ import { system } from './theme';
 import { ApiError } from './api/client';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { I18nProvider } from './i18n';
+import { LocalePreferenceProvider, useLocalePreference } from './i18n/preference';
 import { useRate } from './api/hooks';
 
 /**
@@ -55,12 +56,15 @@ function QueryProvider({ children }: { children: ReactNode }) {
  */
 function Localized() {
   const { session } = useAuth();
+  // Signed out there is no user to ask, so the visitor's own choice stands in -
+  // otherwise the sign-in screen is permanently English.
+  const { locale: preferred } = useLocalePreference();
   const displayCurrency = session?.user.displayCurrency ?? 'USD';
   const rate = useRate(displayCurrency);
 
   return (
     <I18nProvider
-      locale={session?.user.locale ?? 'en'}
+      locale={session?.user.locale ?? preferred}
       displayCurrency={displayCurrency}
       rate={rate.data?.rate ?? null}
     >
@@ -77,7 +81,9 @@ createRoot(container).render(
     <ChakraProvider value={system}>
       <AuthProvider>
         <QueryProvider>
-          <Localized />
+          <LocalePreferenceProvider>
+            <Localized />
+          </LocalePreferenceProvider>
         </QueryProvider>
       </AuthProvider>
     </ChakraProvider>
