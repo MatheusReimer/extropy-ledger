@@ -9,7 +9,7 @@ Built for the Extropy full-stack home challenge: **Option 1 (Personal Expense Tr
 
 | | |
 |---|---|
-| **Repository** | `https://github.com/<your-user>/<your-repo>` *(fill in after pushing)* |
+| **Repository** | https://github.com/MatheusReimer/extropy-ledger |
 | **Live app** | `https://<distribution>.cloudfront.net` *(fill in after `pnpm deploy`)* |
 | **API** | `https://<distribution>.cloudfront.net/api` — same host as the app, on purpose |
 
