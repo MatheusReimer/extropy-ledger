@@ -8,31 +8,49 @@ import { Type, type Schema } from '@google/genai';
  * value and defining the empty string as "not found" makes "I could not read
  * this" a first-class answer instead of a missing key.
  */
+/**
+ * What each field means, written once and handed to both vendors' schemas.
+ *
+ * These descriptions do real work - the `amount` one in particular is what
+ * separates the total from the subtotal directly above it - so they must not
+ * exist in two slightly different versions.
+ */
+const FIELD_DESCRIPTIONS = {
+  merchant: 'Who was paid, as printed. Empty string if not stated.',
+  description:
+    'What was bought, in at most six words - the kind of note a person writes in a ledger, such as "dinner for two" or "weekly groceries". Never a list of the line items.',
+  amount:
+    'The final total charged, as digits with a dot decimal separator and nothing else - no currency symbol, no thousands separator. Empty string if no total can be read.',
+  currency: 'ISO 4217 code such as USD or BRL. Empty string if not printed.',
+  date: 'Transaction date as YYYY-MM-DD. Empty string if not printed.',
+  category: 'Best matching category. Use Other when nothing fits.',
+  confidence:
+    'Zero to one. Below 0.5 when the document is unclear, cropped, or is not a receipt at all.',
+} as const;
+
 export function geminiReceiptSchema(categories: readonly string[]): Schema {
   return {
     type: Type.OBJECT,
     properties: {
       merchant: {
         type: Type.STRING,
-        description: 'Who was paid, as printed. Empty string if not stated.',
+        description: FIELD_DESCRIPTIONS.merchant,
       },
       description: {
         type: Type.STRING,
-        description:
-          'What was bought, in at most six words - the kind of note a person writes in a ledger, such as "dinner for two" or "weekly groceries". Never a list of the line items.',
+        description: FIELD_DESCRIPTIONS.description,
       },
       amount: {
         type: Type.STRING,
-        description:
-          'The final total charged, as digits with a dot decimal separator and nothing else - no currency symbol, no thousands separator. Empty string if no total can be read.',
+        description: FIELD_DESCRIPTIONS.amount,
       },
       currency: {
         type: Type.STRING,
-        description: 'ISO 4217 code such as USD or BRL. Empty string if not printed.',
+        description: FIELD_DESCRIPTIONS.currency,
       },
       date: {
         type: Type.STRING,
-        description: 'Transaction date as YYYY-MM-DD. Empty string if not printed.',
+        description: FIELD_DESCRIPTIONS.date,
       },
       /**
        * No empty option here: Gemini rejects an empty string inside an enum
@@ -43,12 +61,11 @@ export function geminiReceiptSchema(categories: readonly string[]): Schema {
       category: {
         type: Type.STRING,
         enum: [...categories],
-        description: 'Best matching category. Use Other when nothing fits.',
+        description: FIELD_DESCRIPTIONS.category,
       },
       confidence: {
         type: Type.NUMBER,
-        description:
-          'Zero to one. Below 0.5 when the document is unclear, cropped, or is not a receipt at all.',
+        description: FIELD_DESCRIPTIONS.confidence,
       },
     },
     required: ['merchant', 'description', 'amount', 'currency', 'date', 'category', 'confidence'],
@@ -82,4 +99,35 @@ export function buildReceiptSystemPrompt(categories: readonly string[]): string 
     'For category, choose Other when nothing else fits.',
     'Report confidence below 0.5 when the document is unclear, cropped, or is not a receipt.',
   ].join('\n');
+}
+
+/**
+ * The same shape as `geminiReceiptSchema`, in plain JSON Schema.
+ *
+ * Two schemas rather than one because the two vendors want different objects:
+ * Gemini takes its own `Schema` with `Type.OBJECT` enums and `propertyOrdering`,
+ * while every OpenAI-compatible endpoint wants draft JSON Schema with
+ * `additionalProperties: false`. The FIELDS are shared below so the two cannot
+ * drift - a field added to one is added to both, which is the failure this
+ * arrangement is guarding against.
+ */
+export function jsonReceiptSchema(categories: readonly string[]): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: {
+      merchant: { type: 'string', description: FIELD_DESCRIPTIONS.merchant },
+      description: { type: 'string', description: FIELD_DESCRIPTIONS.description },
+      amount: { type: 'string', description: FIELD_DESCRIPTIONS.amount },
+      currency: { type: 'string', description: FIELD_DESCRIPTIONS.currency },
+      date: { type: 'string', description: FIELD_DESCRIPTIONS.date },
+      category: {
+        type: 'string',
+        enum: [...categories],
+        description: FIELD_DESCRIPTIONS.category,
+      },
+      confidence: { type: 'number', description: FIELD_DESCRIPTIONS.confidence },
+    },
+    required: ['merchant', 'description', 'amount', 'currency', 'date', 'category', 'confidence'],
+    additionalProperties: false,
+  };
 }

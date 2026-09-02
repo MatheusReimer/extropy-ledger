@@ -26,7 +26,24 @@ export function parseExtractedExpense(
 ): ExtractedFields | undefined {
   if (!isRecord(raw)) return undefined;
 
-  const amountText = text(raw['amount'], 32);
+  /**
+   * The schema asks for the amount as a STRING, and not every model obliges.
+   *
+   * Gemini honours it because its schema constrains decoding. An
+   * OpenAI-compatible model reading the same schema returned
+   * `"amount": 123.76` - a number, and the correct one. Discarding a right
+   * answer over its JSON type would be brittleness, not strictness, so a finite
+   * number is stringified and sent down the same path.
+   *
+   * That path still matters: `parseAmountToCents` is the function the manual
+   * form uses, so a receipt and a typed entry cannot disagree about what "12.50"
+   * means, and money never touches a float multiply here.
+   */
+  const rawAmount = raw['amount'];
+  const amountText =
+    typeof rawAmount === 'number' && Number.isFinite(rawAmount)
+      ? String(rawAmount)
+      : text(rawAmount, 32);
   const amountCents = amountText === null ? null : parseAmountToCents(amountText);
 
   const dateText = text(raw['date'], 10);

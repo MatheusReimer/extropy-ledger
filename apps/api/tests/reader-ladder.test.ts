@@ -223,3 +223,134 @@ describe('the receipt reader ladder', () => {
     expect(generateContent).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The chain the route actually calls: Gemini first, a different vendor behind it.
+ *
+ * Tested through the composed export rather than the provider in isolation,
+ * because the thing worth pinning down is the HANDOFF - which failures fall
+ * through to the second vendor and which stop at the first.
+ */
+describe('the receipt provider chain', () => {
+  const okBody = {
+    choices: [{ message: { content: GOOD_JSON } }],
+    usage: { prompt_tokens: 10, completion_tokens: 20 },
+  };
+
+  async function loadChain(env: Record<string, string | undefined>) {
+    vi.resetModules();
+    for (const [key, value] of Object.entries(env)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    return import('../src/ai/providers/index.js');
+  }
+
+  it('never calls the second vendor when Gemini reads the document', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { readReceipt } = await loadChain({
+      GEMINI_API_KEY: 'test-key',
+      GEMINI_MODEL: 'primary',
+      GEMINI_FALLBACK_MODEL: 'fallback',
+      OPENROUTER_API_KEY: 'or-key',
+    });
+
+    const outcome = await readReceipt(FILE, CATEGORIES);
+
+    expect(outcome).toMatchObject({ status: 'ok' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('falls through to the second vendor when Google is unreachable', async () => {
+    generateContent.mockRejectedValue(apiError(503));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify(okBody), { status: 200 }));
+    const { readReceipt } = await loadChain({
+      GEMINI_API_KEY: 'test-key',
+      GEMINI_MODEL: 'primary',
+      GEMINI_FALLBACK_MODEL: 'fallback',
+      OPENROUTER_API_KEY: 'or-key',
+    });
+
+    const outcome = await readReceipt(FILE, CATEGORIES);
+
+    expect(outcome).toMatchObject({ status: 'ok' });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('openrouter.ai');
+    fetchSpy.mockRestore();
+  });
+
+  /**
+   * The distinction that keeps the second vendor from being wasted latency.
+   * Two Gemini models looked at the document and agreed it holds no expense;
+   * that is an answer ABOUT the document, and a third opinion cannot change it.
+   */
+  it('does not spend a second vendor on a document already judged unreadable', async () => {
+    generateContent.mockResolvedValue({ text: 'no receipt here' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { readReceipt } = await loadChain({
+      GEMINI_API_KEY: 'test-key',
+      GEMINI_MODEL: 'primary',
+      GEMINI_FALLBACK_MODEL: 'fallback',
+      OPENROUTER_API_KEY: 'or-key',
+    });
+
+    await expect(readReceipt(FILE, CATEGORIES)).resolves.toEqual({ status: 'unreadable' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  /**
+   * The regression this section exists for.
+   *
+   * Caught by a live run, not by reasoning: with a shared deadline, a
+   * slow-but-healthy Gemini spent the entire 25s budget, the signal aborted, and
+   * the second vendor was never asked - the reader reported "unavailable" while
+   * a working fallback sat untouched. Gemini now gets a slice, not the lot.
+   */
+  it('does not let a slow Gemini spend the whole budget and starve the fallback', async () => {
+    // Hangs until aborted, which is how the real SDK behaves on a stalled call:
+    // a mock that ignored the signal would hang the test rather than the budget.
+    generateContent.mockImplementation(({ config }: { config?: { abortSignal?: AbortSignal } }) => {
+      return new Promise((_resolve, reject) => {
+        config?.abortSignal?.addEventListener('abort', () => {
+          reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }));
+        });
+      });
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify(okBody), { status: 200 }));
+    const { readReceipt } = await loadChain({
+      GEMINI_API_KEY: 'test-key',
+      GEMINI_MODEL: 'primary',
+      GEMINI_FALLBACK_MODEL: 'fallback',
+      OPENROUTER_API_KEY: 'or-key',
+    });
+
+    const outcome = await readReceipt(FILE, CATEGORIES, {
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    expect(outcome).toMatchObject({ status: 'ok' });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    fetchSpy.mockRestore();
+  }, 40_000);
+
+  it('behaves exactly as before when no second-vendor key is configured', async () => {
+    generateContent.mockRejectedValue(apiError(503));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { readReceipt } = await loadChain({
+      GEMINI_API_KEY: 'test-key',
+      GEMINI_MODEL: 'primary',
+      GEMINI_FALLBACK_MODEL: 'fallback',
+      OPENROUTER_API_KEY: undefined,
+    });
+
+    await expect(readReceipt(FILE, CATEGORIES)).resolves.toEqual({ status: 'unavailable' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});

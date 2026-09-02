@@ -143,6 +143,37 @@ describe('parseExtractedExpense', () => {
   });
 });
 
+/**
+ * Not every model returns the amount as the string the schema asks for.
+ * Gemini does, because its schema constrains decoding; an OpenAI-compatible
+ * model reading the same schema returned `"amount": 123.76` - a number, and the
+ * right one. Throwing away a correct answer over its JSON type is brittleness.
+ */
+describe('parseExtractedExpense amount typing', () => {
+  it('accepts the amount as a number as well as a string', () => {
+    const asString = parseExtractedExpense(
+      { merchant: 'X', description: 'y', amount: '123.76', currency: 'USD', date: '2026-08-14', category: 'Dining', confidence: 0.9 },
+      CATEGORIES,
+    );
+    const asNumber = parseExtractedExpense(
+      { merchant: 'X', description: 'y', amount: 123.76, currency: 'USD', date: '2026-08-14', category: 'Dining', confidence: 0.9 },
+      CATEGORIES,
+    );
+    expect(asString?.amountCents).toBe(12_376);
+    expect(asNumber?.amountCents).toBe(12_376);
+  });
+
+  it('still refuses a number that is not a usable amount', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -12.5]) {
+      const result = parseExtractedExpense(
+        { merchant: 'X', description: 'y', amount: bad, currency: 'USD', date: '2026-08-14', category: 'Dining', confidence: 0.9 },
+        CATEGORIES,
+      );
+      expect(result?.amountCents ?? null).toBeNull();
+    }
+  });
+});
+
 describe('extractExpense', () => {
   const file = { bytes: Buffer.from(PDF), mimeType: 'application/pdf' as const };
 

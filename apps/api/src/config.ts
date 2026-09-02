@@ -39,6 +39,25 @@ const envSchema = z.object({
    * answered in a second.
    */
   GEMINI_FALLBACK_MODEL: z.string().min(1).default('gemini-3.1-flash-lite'),
+
+  /**
+   * The second VENDOR for reading receipts. Optional, like every other key here.
+   *
+   * Without it the reader is Google-only: hedging two Gemini models survives a
+   * congested model but not a revoked key, an exhausted daily quota, or a Google
+   * outage. https://openrouter.ai/keys
+   */
+  OPENROUTER_API_KEY: z.string().optional(),
+  /**
+   * Free, image-capable, and picked by testing rather than by reading a table.
+   *
+   * The first choice - `google/gemma-4-31b-it:free` - was rate-limited upstream
+   * on the first live call. Of the free vision models that answered, this one
+   * returned well-formed JSON on every request shape tried; another returned
+   * `"amount": ": 123.76"`. It is also the only candidate with no Google in it,
+   * which is the entire point of this rung.
+   */
+  OPENROUTER_MODEL: z.string().min(1).default('minimax/minimax-m3:free'),
   GROQ_API_KEY: z.string().min(1).optional(),
   GROQ_MODEL: z.string().min(1).default('openai/gpt-oss-120b'),
 

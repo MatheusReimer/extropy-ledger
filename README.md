@@ -26,7 +26,8 @@ Built for the Extropy full-stack home challenge: **Option 1 (Personal Expense Tr
 | MongoDB Atlas | M0 (free) | Any connection string works; a local `mongod` is fine too. |
 | AWS CLI | v2 | Only needed to deploy. Configured credentials + one `cdk bootstrap`. |
 | Gemini API key | — | **Optional**, free, no card. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| Groq API key | — | **Optional**, free, no card. The second provider in the chain — see [why there are two](#why-two-providers). |
+| Groq API key | — | **Optional**, free, no card. Second provider for *categorisation* — see [why there are two](#why-two-providers). |
+| OpenRouter key | — | **Optional**, free. Second *vendor* for reading receipts. [openrouter.ai/keys](https://openrouter.ai/keys) |
 
 ### Four commands
 
@@ -387,6 +388,61 @@ rather than oversights:
 - **No second provider**, because Groq's models are text-only and cannot accept an image at
   all. That is why `ReadReceipt` is a separate type from `AskModel` — the asymmetry lives in
   the type system instead of surfacing as a runtime surprise.
+
+### Two rungs, answering two different failures
+
+Reading a receipt goes Gemini first, then a different vendor entirely. The two rungs are not
+redundancy for its own sake - they fail for different reasons:
+
+| Rung | Survives | Does not survive |
+| --- | --- | --- |
+| **Gemini, two models hedged** | a congested or slow model — the common case by far | anything that takes the account down |
+| **OpenRouter** | a revoked key, an exhausted daily quota, a Google outage | nothing left after this |
+
+Hedging two models of the same vendor was never a defence against a bad key or a spent quota:
+all of Google's models die together. That is the gap this second vendor closes, and it is worth
+stating plainly rather than implying that "two models" meant "two providers".
+
+OpenRouter rather than a named vendor because it is one key across many models, several of them
+free and image-capable, so trading the model later is an env var rather than a new adapter. The
+model was **checked against OpenRouter's live model list, not assumed** - of the eleven free
+vision models it offers, only some support `response_format`, and structured output is what
+keeps the parser from guessing. `google/gemma-4-31b-it:free` is the default;
+`minimax/minimax-m3:free` is the verified alternative if you want a rung with no Google in it at
+all.
+
+The whole call is a hand-written `fetch` against the OpenAI-compatible shape. A second SDK to
+hold thirty lines is not a trade worth making.
+
+**Three things only a live call could have told me**, all of which the unit tests were happy to
+let through:
+
+1. **`response_format` is advertised, not enforced.** Asked with `json_schema` and
+   `strict: true`, the model read the receipt perfectly and answered in *markdown prose* —
+   `- **Merchant:** Harbor & Pine`. OpenRouter passes the field upstream and hopes; Gemini needs
+   none of this because its schema constrains decoding. One explicit sentence in the prompt is
+   what actually produces JSON, verified across three models: with it, all three complied; without
+   it, none did.
+2. **The amount came back as a number**, not the string the schema asks for — `"amount": 123.76`,
+   and correct. Discarding a right answer over its JSON type is brittleness rather than rigour, so
+   `parseExtractedExpense` now takes either and sends both down the same `parseAmountToCents` path.
+3. **The first-choice model was rate-limited** on the very first call, and a second returned
+   `"amount": ": 123.76"`. `minimax/minimax-m3:free` read it correctly every time — and has no
+   Google in it, which is the whole point of this rung.
+
+And one bug this chain reintroduced, caught by running it rather than reasoning about it: with a
+single shared deadline, a slow-but-healthy Gemini spent the entire 25-second budget, so the
+signal was already aborted when the fallback's turn came and it was never asked. The reader
+reported `unavailable` while a working second vendor sat untouched. Gemini now gets a
+**15-second slice** — above its hedged worst case of 10.7s — leaving the remainder for the
+fallback. It is the same lesson as the categorisation chain, one level up: a fallback the primary
+can starve is not a fallback.
+
+Two behaviours worth knowing. `unreadable` deliberately does **not** fall through: if both
+Gemini models looked and agreed the document holds no expense, that is an answer about the
+document, and a third opinion is latency spent to be told the same thing. And with no
+`OPENROUTER_API_KEY` the rung reports `unavailable` immediately, so the app behaves exactly as
+it did before - there is a test for precisely that.
 
 ### A second model, since there is no second provider
 
@@ -753,7 +809,7 @@ trial.
 ## Testing
 
 ```bash
-pnpm test        # 151 unit tests
+pnpm test        # 158 unit tests
 pnpm typecheck   # tsc --noEmit across every package
 pnpm lint        # eslint
 pnpm check       # all three
