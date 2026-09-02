@@ -24,7 +24,7 @@ import {
   type FieldErrors,
 } from '@expense/shared';
 import { useCategorize, useCreateExpense, useUpdateExpense } from '../api/hooks';
-import { todayIso } from '../lib/dates';
+import { formatMonth, todayIso } from '../lib/dates';
 import { ErrorState } from './StateViews';
 import { ReceiptDropzone } from './ReceiptDropzone';
 import { SavedExpense } from './SavedExpense';
@@ -37,6 +37,8 @@ type Props = {
   onDone?: ((saved?: ExpenseDto) => void) | undefined;
   /** Single column, for the narrow rail on the overview. */
   compact?: boolean;
+  /** The month on screen, so a saved entry can say when it lands elsewhere. */
+  viewingMonth?: string | undefined;
 };
 
 const emptyDraft = (currency: string) => ({
@@ -62,7 +64,7 @@ const SOURCE_KEY: Record<CategorizeResult['source'], TranslationKey> = {
   fallback: 'form.sourceFallback',
 };
 
-export function ExpenseForm({ categories, editing, onDone, compact = false }: Props) {
+export function ExpenseForm({ categories, editing, onDone, compact = false, viewingMonth }: Props) {
   const t = useT();
   const { displayCurrency } = useI18n();
   /**
@@ -81,7 +83,9 @@ export function ExpenseForm({ categories, editing, onDone, compact = false }: Pr
    * the user is looking at updates in the table behind the form, so a
    * confirmation would be telling them something they can already see.
    */
-  const [justSaved, setJustSaved] = useState<ExpenseDto | undefined>(undefined);
+  const [justSaved, setJustSaved] = useState<
+    { expense: ExpenseDto; landedIn?: string | undefined } | undefined
+  >(undefined);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [suggestion, setSuggestion] = useState<CategorizeResult | undefined>(undefined);
 
@@ -267,7 +271,18 @@ export function ExpenseForm({ categories, editing, onDone, compact = false }: Pr
       setSuggestion(undefined);
       suggestedFor.current = '';
       categoryTouched.current = false;
-      if (!editing) setJustSaved(saved);
+      /*
+       * Captured HERE, not at render time.
+       *
+       * `onDone` moves the page to the saved expense's month, so by the next
+       * render `viewingMonth` already equals it and the comparison is always
+       * false. The interesting fact is where the user WAS when they saved.
+       */
+      const savedMonth = saved.date.slice(0, 7);
+      const landedIn =
+        viewingMonth && savedMonth !== viewingMonth ? formatMonth(savedMonth) : undefined;
+
+      if (!editing) setJustSaved({ expense: saved, landedIn });
       onDone?.(saved);
     };
 
@@ -281,9 +296,10 @@ export function ExpenseForm({ categories, editing, onDone, compact = false }: Pr
   if (justSaved) {
     return (
       <SavedExpense
-        expense={justSaved}
+        expense={justSaved.expense}
         categories={categories}
         onAddAnother={() => setJustSaved(undefined)}
+        landedInMonth={justSaved.landedIn}
       />
     );
   }

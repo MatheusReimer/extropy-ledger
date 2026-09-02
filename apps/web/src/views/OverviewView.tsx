@@ -176,6 +176,7 @@ export function OverviewView({
                       categories={categories.data}
                       editing={editing}
                       onDone={handleSaved}
+                      viewingMonth={month}
                       compact
                     />
                   ) : null}

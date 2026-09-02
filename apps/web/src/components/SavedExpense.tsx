@@ -20,10 +20,16 @@ export function SavedExpense({
   expense,
   categories,
   onAddAnother,
+  landedInMonth,
 }: {
   expense: ExpenseDto;
   categories: CategoryDto[];
   onAddAnother: () => void;
+  /**
+   * Set only when the entry belongs to a month other than the one on screen when
+   * it was saved - a receipt dated the 8th of last month, typically.
+   */
+  landedInMonth?: string | undefined;
 }) {
   const t = useT();
   const { formatExpense, localeTag } = useI18n();
@@ -56,8 +62,15 @@ export function SavedExpense({
         <Text fontSize="xs" fontWeight="semibold" letterSpacing="0.08em" textTransform="uppercase" color="accent">
           {t('saved.title')}
         </Text>
-        <Text fontSize="sm" color="fg.muted">
-          {t('saved.hint')}
+        {/*
+          A receipt dated last month creates a LAST MONTH expense, so this
+          month's totals correctly do not move. Saying nothing makes that look
+          like a broken dashboard - the row is plainly there and every figure
+          reads zero. The page follows the money, and this says so out loud
+          rather than leaving the reader to work out why the month changed.
+        */}
+        <Text fontSize="sm" color={landedInMonth ? 'accent' : 'fg.muted'}>
+          {landedInMonth ? t('saved.landedIn', { month: landedInMonth }) : t('saved.hint')}
         </Text>
       </Stack>
 
