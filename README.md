@@ -1007,6 +1007,37 @@ endpoint gives an exact number instantly, for free, and without a hallucination 
 judgement the brief asks for is knowing where an LLM adds value and where it adds latency and
 cost on top of a `$group` query. Categorisation is the former; summing a column is the latter.
 
+### No password reset, and that is a decision
+
+There is no "forgot password" flow. The brief asks for sign-up, log-in and JWT authentication,
+and this is none of those - but it is the first thing a real deployment would need, so it is
+worth being explicit rather than silent.
+
+**A half-built one would be worse than none.** Any reset that does not actually deliver a
+secret to an inbox - a form that resets on knowing the email address alone, say - is an account
+takeover feature wearing a helpful label. And delivery is the real blocker: Amazon SES starts
+every account in a sandbox that only sends to pre-verified addresses, and leaving it takes a
+support request, which is the same queue this project is already waiting in for CloudFront.
+
+The flow it would need, since the design is the interesting part:
+
+- A **single-use token**, stored hashed. A leaked database should not yield working reset links,
+  for the same reason it does not yield passwords.
+- **Short expiry**, fifteen to thirty minutes, and invalidated the moment it is used.
+- The response is **identical whether or not the address exists**. Login already works this way
+  (see A07 in the security table); a reset endpoint that answered differently would hand back
+  the user enumeration that login refuses to give.
+- **Rate limited per address and per IP**, or the endpoint is a way to have this service mail
+  somebody repeatedly.
+
+And one piece that is specific to what is already built here: **resetting a password has to
+invalidate existing sessions**, and this app's JWTs are deliberately stateless with no
+revocation list. A stolen token would otherwise keep working after the victim did exactly what
+they were told to do. That needs a `tokenVersion` on the user, bumped on reset and checked when
+a token is verified - which turns every authenticated request into a database read, and is
+precisely the trade the current design avoids. It is a real architectural consequence, not a
+missing endpoint.
+
 All three of Option 1's optional enhancements are implemented: **budgets per category**, **CSV
 export**, and **spending trends over time**. What remains out of scope is deliberate: recurring
 expenses, shared accounts, and receipt storage in S3 rather than Mongo (see the note on the
