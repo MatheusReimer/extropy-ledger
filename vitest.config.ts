@@ -15,6 +15,10 @@ export default defineConfig({
       MONGODB_URI: 'mongodb://localhost:27017/test',
       JWT_SECRET: 'test-secret-that-is-long-enough-for-hs256-abcdef',
       JWT_TTL: '1h',
+      // Present so provider code gets past its "no key configured" guard and
+      // actually builds a request. Every test that uses it stubs `fetch`, so
+      // nothing here ever reaches OpenRouter.
+      OPENROUTER_API_KEY: 'test-key-never-sent-anywhere',
     },
   },
 });

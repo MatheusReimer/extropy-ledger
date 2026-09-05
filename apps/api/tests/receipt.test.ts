@@ -3,6 +3,7 @@ import { PREDEFINED_CATEGORIES } from '@expense/shared';
 import { decodeUpload, sniffMimeType } from '../src/lib/files.js';
 import { parseExtractedExpense } from '../src/ai/receipt-parse.js';
 import { extractExpense, toDescription } from '../src/ai/extract.js';
+import { readReceiptWithOpenRouter } from '../src/ai/providers/openrouter.js';
 
 const CATEGORIES = [...PREDEFINED_CATEGORIES];
 
@@ -245,6 +246,56 @@ describe('extractExpense', () => {
     await expect(extractExpense(file, CATEGORIES, { readReceipt })).resolves.toEqual({
       status: 'unavailable',
     });
+  });
+});
+
+describe('the OpenRouter reader sends each file type the way that vendor accepts it', () => {
+  /**
+   * A PDF is not an image, and OpenRouter answers 400 if you send one as
+   * `image_url`. That failure was invisible: Gemini reads PDFs directly and
+   * goes first, so the fallback rung silently covered images only - exactly the
+   * half of the problem a fallback is supposed to cover when the primary is
+   * down.
+   *
+   * These assert on the request BODY rather than a live answer, because the
+   * point is the shape we send, and a network test would be pinning OpenRouter's
+   * uptime rather than our code.
+   */
+  const captureBody = async (mimeType: 'application/pdf' | 'image/jpeg') => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: { body: string }) => {
+        sent = JSON.parse(init.body) as Record<string, unknown>;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ choices: [{ message: { content: '{}' } }] }),
+        } as unknown as Response);
+      }),
+    );
+    await readReceiptWithOpenRouter({ mimeType, bytes: Buffer.from([1, 2, 3]) }, ['Other']);
+    vi.unstubAllGlobals();
+    return sent;
+  };
+
+  const userContent = (body: Record<string, unknown>) => {
+    const messages = body['messages'] as { role: string; content: unknown }[];
+    return messages.find((m) => m.role === 'user')?.content as { type: string }[];
+  };
+
+  it('sends a PDF as a file, with the parser plugin enabled', async () => {
+    const body = await captureBody('application/pdf');
+
+    expect(userContent(body).map((part) => part.type)).toContain('file');
+    expect(body['plugins']).toEqual([{ id: 'file-parser', pdf: { engine: 'pdf-text' } }]);
+  });
+
+  it('sends an image as an image, with no plugin', async () => {
+    const body = await captureBody('image/jpeg');
+
+    expect(userContent(body).map((part) => part.type)).toContain('image_url');
+    expect(body['plugins']).toBeUndefined();
   });
 });
 

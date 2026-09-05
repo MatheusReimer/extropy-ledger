@@ -119,6 +119,7 @@ export const readReceiptWithOpenRouter: ReadReceipt = async (file, allowedCatego
   if (options?.signal?.aborted) return { status: 'unavailable' };
 
   const model = config.OPENROUTER_RECEIPT_MODEL;
+  const isPdf = file.mimeType === 'application/pdf';
   const dataUrl = `data:${file.mimeType};base64,${file.bytes.toString('base64')}`;
 
   try {
@@ -139,10 +140,16 @@ export const readReceiptWithOpenRouter: ReadReceipt = async (file, allowedCatego
             role: 'user',
             content: [
               { type: 'text', text: 'Extract the expense from this receipt or invoice.' },
-              { type: 'image_url', image_url: { url: dataUrl } },
+              isPdf
+                ? { type: 'file', file: { filename: 'receipt.pdf', file_data: dataUrl } }
+                : { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
         ],
+        // A PDF is not an image, and sending one as `image_url` is a 400. The
+        // file-parser plugin is what makes the fallback cover every type the
+        // upload accepts rather than images only.
+        ...(isPdf ? { plugins: [{ id: 'file-parser', pdf: { engine: 'pdf-text' } }] } : {}),
         response_format: {
           type: 'json_schema',
           json_schema: {

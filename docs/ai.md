@@ -366,6 +366,13 @@ first call and `dots-studio/dots-3-note-preview:free` returned a malformed amoun
 The whole call is a hand-written `fetch` against the OpenAI-compatible shape. A second SDK to
 hold thirty lines is not a trade worth making.
 
+**A PDF is not an image, and that was a silent hole.** Every upload was sent to OpenRouter as
+`image_url`, which a vision model answers with a 400 for a PDF. It was invisible because Gemini
+reads PDFs natively and goes first — so the fallback rung covered images only, which is exactly
+the half of the problem a fallback exists for when the primary is down. PDFs now go as a `file`
+part with OpenRouter's `file-parser` plugin; images still go as `image_url`. Two tests assert on
+the request body rather than a live answer, because the thing worth pinning is the shape we send.
+
 **Three things only a live call could have told me**, all of which the unit tests were happy to
 let through:
 
