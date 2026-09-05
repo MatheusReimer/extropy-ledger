@@ -76,7 +76,7 @@ function start(): void {
     });
     if (!config.aiEnabled) {
       console.warn(
-        'No GEMINI_API_KEY or GROQ_API_KEY - /ai/categorize will use rules + fallback only.',
+        'No GEMINI_API_KEY or OPENROUTER_API_KEY - /ai/categorize will use rules + fallback only.',
       );
     }
   });

@@ -10,7 +10,6 @@
   "dependencies": {
     "@expense/shared": "workspace:*",
     "@google/genai": "^2.20.0",
-    "groq-sdk": "^1.6.0",
     "jose": "^6.1.0",
     "mongodb": "^6.20.0",
     "zod": "^4.5.4"

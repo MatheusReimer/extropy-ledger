@@ -12,10 +12,9 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().min(1).default('gemini-3.5-flash-lite'),
   GEMINI_FALLBACK_MODEL: z.string().min(1).default('gemini-3.1-flash-lite'),
 
-  OPENROUTER_API_KEY: z.string().optional(),
-  OPENROUTER_MODEL: z.string().min(1).default('minimax/minimax-m3:free'),
-  GROQ_API_KEY: z.string().min(1).optional(),
-  GROQ_MODEL: z.string().min(1).default('openai/gpt-oss-120b'),
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_CATEGORIZE_MODEL: z.string().min(1).default('nvidia/nemotron-3-super-120b-a12b:free'),
+  OPENROUTER_RECEIPT_MODEL: z.string().min(1).default('minimax/minimax-m3:free'),
 
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -51,7 +50,7 @@ export function buildConfig(env: NodeJS.ProcessEnv): Config {
     corsOrigins: CORS_ORIGINS.split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
-    aiEnabled: Boolean(rest.GEMINI_API_KEY || rest.GROQ_API_KEY),
+    aiEnabled: Boolean(rest.GEMINI_API_KEY || rest.OPENROUTER_API_KEY),
   };
 }
 

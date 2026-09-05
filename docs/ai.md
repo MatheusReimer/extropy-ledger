@@ -19,7 +19,7 @@ description ──▶ ① rule pre-pass ───match───▶ { category, c
                 ② Gemini ──────────valid───▶ { category, confidence, source: "model" }
                       │ 429 / 503 / timeout
                       ▼
-                ③ Groq ────────────valid───▶ { category, confidence, source: "model" }
+                ③ OpenRouter ──────valid───▶ { category, confidence, source: "model" }
                       │ still nothing, or the 8s chain budget expired
                       ▼
                 ④ fallback ────────────────▶ { category: "Other", confidence: 0, source: "fallback" }
@@ -68,15 +68,15 @@ Live, that is exactly what happens:
 ```
     0ms  rule      Dining      95%  "Starbucks downtown"          ← never left the process
   754ms  model     Other       40%  "Zorblatt Industries consulting retainer"
- 4580ms  model     Housing     95%  "Deposit for the beach house in December"   ← Gemini stalled, Groq answered
+ 4580ms  model     Housing     95%  "Deposit for the beach house in December"   ← Gemini stalled, the second rung answered
  4516ms  model     Shopping    95%  "New winter coat from the outlet"           ← same
   826ms  model     Other       30%  "Monthly payment to Vandelay Industries"
 ```
 
 **Two budgets, and the second one took a live test to find.** The first version used a single
 8-second deadline shared by the chain. It looked right and was not: when Gemini stalled it
-consumed the whole budget, the chain logged `budgetExpired: true`, and Groq was never called
-at all. _A fallback the primary can starve is not a fallback._ Each attempt now gets its own
+consumed the whole budget, the chain logged `budgetExpired: true`, and the second provider was
+never called at all. _A fallback the primary can starve is not a fallback._ Each attempt now gets its own
 4-second slice bounded by whatever remains of the 8-second total, so a hung provider costs its
 slice and nothing more — which is why those two rows above are 4.5-second successes rather
 than 8-second failures. Two unit tests pin the behaviour down.
@@ -85,11 +85,36 @@ It stays sequential rather than racing both, because racing would spend two free
 on every single categorisation to save time on the minority that fail. The second provider is
 insurance, and insurance you claim on every trip is just a bill.
 
-Model choice on each side was measured, not assumed. On Groq, `openai/gpt-oss-120b` answered
-7 of 8 descriptions at a 729 ms median; `gpt-oss-20b` was faster but failed schema validation
-on 4 of 8, and `qwen3.6-27b` failed all 8. Groq validates generated JSON server-side and
-returns 400 when the model misses the schema — that is the model falling short rather than a
-malformed request, so the provider logs it as routine and the chain absorbs it.
+### One vendor, arrived at by deleting the other
+
+The second rung was Groq for categorising and OpenRouter for reading receipts: two SDKs, two
+keys, two catalogues to track. OpenRouter is itself a router, so a single key reaches many
+models on infrastructure independent of Google — which is the only property the second vendor
+was ever bought for. Collapsing to one was worth checking rather than assuming, so it was
+measured on twelve long-tail descriptions:
+
+| Second rung                                         | Valid | p50        | p90    | max     |
+| --------------------------------------------------- | ----- | ---------- | ------ | ------- |
+| OpenRouter `nvidia/nemotron-3-super-120b-a12b:free` | 12/12 | **332 ms** | 548 ms | 550 ms  |
+| Groq `openai/gpt-oss-120b`                          | 12/12 | 520 ms     | 644 ms | 1144 ms |
+
+Simpler _and_ faster, so there was no trade to weigh. Two honest caveats, because a single good
+run is not a latency guarantee:
+
+- **Free-tier latency has a long tail on both vendors.** Individual OpenRouter calls were
+  observed at 5.6 s and once past 15 s, against a 332 ms median. That tail is exactly what the
+  per-provider 4-second slice below exists to cut off — the request is abandoned, the rule
+  fallback answers, and the user is told there was no confident match rather than made to wait.
+- **One vendor now backs both features**, so a single outage or exhausted quota takes out both
+  fallbacks rather than one. Gemini remains first on both paths and the rule table still answers
+  with no provider at all, so the floor is unchanged; the middle rung is simply less redundant
+  than it was.
+
+Model choice was measured too, not assumed. Of the four free models advertising structured
+output, `nemotron-3-super-120b` answered 8/8 schema-valid and agreed with the expected category
+7/8; `minimax-m3` managed 6/8 at a 1362 ms median and was rate-limited twice; `glm-5.2` and
+`lfm-2.5-2.6b` were unusable for this. The one disagreement is arguable rather than wrong — it
+filed a coffee-bean subscription under Food rather than Dining.
 
 Each provider is a module implementing one `AskModel` type, and `categorize.ts` takes the
 composed chain as an injected dependency. Adding, reordering or removing a provider touches
@@ -292,15 +317,16 @@ mean inventing an exchange rate.
 
 ## The honest asymmetry
 
-There is no rule pre-pass and no second provider on this path, and both absences are real
-rather than oversights:
+There is no rule pre-pass on this path, and the absence is real rather than an oversight:
 
 - **No rule pre-pass**, because there is no cheap deterministic shortcut for reading a
   photograph. `Set.has` answers "is Starbucks dining?"; nothing answers "what does this image
   say" without a model. Inventing a first step here would be architecture for its own sake.
-- **No second provider**, because Groq's models are text-only and cannot accept an image at
-  all. That is why `ReadReceipt` is a separate type from `AskModel` — the asymmetry lives in
-  the type system instead of surfacing as a runtime surprise.
+- **The second provider is reached differently** from the categorisation chain. Reading an
+  image fails for different reasons than classifying a string, so the ladder below tries a
+  second Gemini _model_ before it tries a second vendor. That asymmetry is why `ReadReceipt` is
+  a separate type from `AskModel`: it lives in the type system instead of surfacing as a
+  runtime surprise.
 
 ## Two rungs, answering two different failures
 
@@ -318,11 +344,12 @@ stating plainly rather than implying that "two models" meant "two providers".
 
 OpenRouter rather than a named vendor because it is one key across many models, several of them
 free and image-capable, so trading the model later is an env var rather than a new adapter. The
-model was **checked against OpenRouter's live model list, not assumed** - of the eleven free
-vision models it offers, only some support `response_format`, and structured output is what
-keeps the parser from guessing. `google/gemma-4-31b-it:free` is the default;
-`minimax/minimax-m3:free` is the verified alternative if you want a rung with no Google in it at
-all.
+model was **checked against OpenRouter's live model list, not assumed** - only some free models
+support `response_format`, and structured output is what keeps the parser from guessing.
+`minimax/minimax-m3:free` is the default (`OPENROUTER_RECEIPT_MODEL`): it read the sample
+correctly on every attempt, and it is the only tested candidate with no Google in it, which is
+the entire point of this rung. `google/gemma-4-31b-it:free` was rate-limited upstream on the
+first call and `dots-studio/dots-3-note-preview:free` returned a malformed amount.
 
 The whole call is a hand-written `fetch` against the OpenAI-compatible shape. A second SDK to
 hold thirty lines is not a trade worth making.
@@ -357,12 +384,12 @@ document, and a third opinion is latency spent to be told the same thing. And wi
 `OPENROUTER_API_KEY` the rung reports `unavailable` immediately, so the app behaves exactly as
 it did before - there is a test for precisely that.
 
-## A second model, since there is no second provider
+## A second model, before the second vendor
 
-Groq cannot read an image, so the receipt path cannot fail over to another vendor. What it
-can do is fail over to another **model**, and on Gemini's free tier that is not a token
-gesture: while benchmarking, one model returned 503 in the same minute another answered in a
-second. Google pools capacity per model, so a different model is a different queue.
+Before the receipt path leaves Google at all, it tries a second Gemini **model**, and on the
+free tier that is not a token gesture: while benchmarking, one model returned 503 in the same
+minute another answered in a second. Google pools capacity per model, so a different model is
+a different queue — and it is a cheaper rung than a different vendor, so it comes first.
 
 Two models, up to two attempts each, and the two loops answer different questions:
 

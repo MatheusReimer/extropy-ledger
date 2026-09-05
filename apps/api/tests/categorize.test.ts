@@ -210,8 +210,8 @@ describe('firstAnswerFrom', () => {
 
   /**
    * The bug this pins down was found live, not in review: with a single shared
-   * deadline, a stalled Gemini consumed the entire chain budget and Groq was
-   * never called. A fallback the primary can starve is not a fallback.
+   * deadline, a stalled Gemini consumed the entire chain budget and the second
+   * provider was never called. A fallback the primary can starve is not one.
    */
   it('does not let a stalled provider starve the next one', async () => {
     const slow: Provider = {

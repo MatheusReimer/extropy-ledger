@@ -76,7 +76,8 @@ at once, with a description of each — rather than failing later inside a reque
                                         └────────┬────────┘        └──────────────┘
                                                  │  only when a rule can't answer
                                         ┌────────▼────────┐
-                                        │ Gemini → Groq   │
+                                        │ Gemini →        │
+                                        │ OpenRouter      │
                                         │ (provider chain)│
                                         └─────────────────┘
 ```
@@ -124,7 +125,7 @@ description ──▶ ① rule pre-pass ───match───▶ { category, c
                 ② Gemini ──────────valid───▶ { category, confidence, source: "model" }
                       │ 429/5xx/invalid
                       ▼
-                ③ Groq ────────────valid───▶ { category, confidence, source: "model" }
+                ③ OpenRouter ──────valid───▶ { category, confidence, source: "model" }
                       │ still nothing
                       ▼
                 ④ { category: "Other", confidence: 0, source: "fallback" }
@@ -135,6 +136,15 @@ in under a millisecond. The model is for the long tail, and the response always 
 answered. A second provider is there because measurement demanded it: Gemini's free tier
 returned 503/504 on roughly a third of calls under load, and a retry on the same provider just
 queues behind the same congestion.
+
+**One vendor backs both AI features.** That second rung used to be Groq for categorising and
+OpenRouter for receipts — two SDKs, two keys, two catalogues to keep track of. OpenRouter is
+itself a router, so one key reaches many models on infrastructure independent of Google, which
+is the only thing the second vendor was ever buying. Measured on twelve long-tail descriptions,
+OpenRouter answered 12/12 valid at a **332 ms median (548 ms p90)** against Groq's 12/12 at
+**520 ms (644 ms p90)** — so the simpler arrangement is also the faster one, and there was no
+trade to make. The honest cost is that one outage now takes out both fallbacks instead of one;
+Gemini still goes first on both paths, and the rule table still answers with no provider at all.
 
 Uploading a receipt goes further — Gemini reads the document directly via `inlineData`, with no
 PDF parser and no OCR library, and pre-fills the form for you to confirm. Nothing is auto-saved.
@@ -366,11 +376,12 @@ free-tier congestion, which is exactly what the second provider and the fallback
 
 **A model name returns 404 or `model_not_found`.**
 Provider catalogues move, and a retired name fails unhelpfully rather than loudly. This bit the
-deployment: `.env` pinned `GROQ_MODEL=llama-3.3-70b-versatile`, which Groq has since removed,
-overriding the working default. Because Gemini answers first, the dead rung was invisible until
-the model list was checked against the live API. If categorisation feels less reliable than it
-should, verify `GEMINI_MODEL` / `GROQ_MODEL` / `OPENROUTER_MODEL` against the provider's current
-catalogue before debugging anything else.
+deployment: `.env` pinned a Groq model the vendor had since removed, overriding a working
+default. Because Gemini answers first, the dead rung was invisible until the catalogue was
+checked against the live API. Leave the model variables blank unless you have measured a
+replacement — the defaults are the measured ones — and if categorisation feels less reliable
+than it should, verify them against the provider's current catalogue before debugging anything
+else.
 
 **`Manually set deadline 5s is too short` from Gemini.**
 The current Flash models refuse a server-side deadline under ten seconds. That is why the Gemini

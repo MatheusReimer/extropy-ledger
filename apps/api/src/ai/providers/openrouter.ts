@@ -1,18 +1,32 @@
 import { getConfig } from '../../config.js';
 import { logger, describeError } from '../../lib/logger.js';
+import { buildSystemPrompt, buildUserPrompt } from '../prompt.js';
+import { jsonResponseSchema } from '../schema.js';
+import { parseModelCategory } from '../parse.js';
 import { buildReceiptSystemPrompt, jsonReceiptSchema } from '../receipt-schema.js';
 import { parseExtractedExpense } from '../receipt-parse.js';
-import type { ReadReceipt } from './types.js';
+import type { AskModel, ReadReceipt } from './types.js';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
-const MAX_TOKENS = 900;
+const CATEGORY_MAX_TOKENS = 300;
+const RECEIPT_MAX_TOKENS = 900;
 
-const JSON_RULE = `
+const categoryJsonRule = `
+
+Reply with a single JSON object and nothing else - no prose, no markdown, no code fence.
+Keys exactly: category, confidence.`;
+
+const receiptJsonRule = `
 
 Reply with a single JSON object and nothing else - no prose, no markdown, no code fence.
 Keys exactly: merchant, description, amount, currency, date, category, confidence.`;
 
+/**
+ * OpenRouter advertising `response_format` does not mean the upstream honours
+ * it, so the object is dug out of whatever came back rather than assumed to be
+ * the whole body.
+ */
 function extractJson(content: string): unknown {
   const start = content.indexOf('{');
   const end = content.lastIndexOf('}');
@@ -23,7 +37,80 @@ function extractJson(content: string): unknown {
 type ChatResponse = {
   choices?: { message?: { content?: string | null } }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
-  error?: { message?: string };
+};
+
+export const askOpenRouter: AskModel = async (input, allowedCategories, options) => {
+  const config = getConfig();
+  if (!config.OPENROUTER_API_KEY) return undefined;
+
+  const model = config.OPENROUTER_CATEGORIZE_MODEL;
+
+  try {
+    const response = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: buildSystemPrompt(allowedCategories) + categoryJsonRule },
+          { role: 'user', content: buildUserPrompt(input) },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'expense_category',
+            schema: jsonResponseSchema(allowedCategories),
+            strict: true,
+          },
+        },
+        max_tokens: CATEGORY_MAX_TOKENS,
+        temperature: 0,
+      }),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      const routine = response.status === 429 || response.status >= 500;
+      logger[routine ? 'warn' : 'error']('ai provider failed', {
+        provider: 'openrouter',
+        model,
+        status: response.status,
+        message: detail.slice(0, 200),
+      });
+      return undefined;
+    }
+
+    const body = (await response.json()) as ChatResponse;
+    const content = body.choices?.[0]?.message?.content;
+    const parsed = (() => {
+      if (!content) return undefined;
+      try {
+        return parseModelCategory(extractJson(content), allowedCategories);
+      } catch {
+        return undefined;
+      }
+    })();
+
+    logger.info('ai provider answered', {
+      provider: 'openrouter',
+      model,
+      matched: Boolean(parsed),
+      inputTokens: body.usage?.prompt_tokens,
+      outputTokens: body.usage?.completion_tokens,
+    });
+    return parsed;
+  } catch (error) {
+    if (options?.signal?.aborted) {
+      logger.info('ai provider cancelled', { provider: 'openrouter', model });
+      return undefined;
+    }
+    logger.warn('ai provider failed', { provider: 'openrouter', model, ...describeError(error) });
+    return undefined;
+  }
 };
 
 export const readReceiptWithOpenRouter: ReadReceipt = async (file, allowedCategories, options) => {
@@ -31,7 +118,7 @@ export const readReceiptWithOpenRouter: ReadReceipt = async (file, allowedCatego
   if (!config.OPENROUTER_API_KEY) return { status: 'unavailable' };
   if (options?.signal?.aborted) return { status: 'unavailable' };
 
-  const model = config.OPENROUTER_MODEL;
+  const model = config.OPENROUTER_RECEIPT_MODEL;
   const dataUrl = `data:${file.mimeType};base64,${file.bytes.toString('base64')}`;
 
   try {
@@ -44,7 +131,10 @@ export const readReceiptWithOpenRouter: ReadReceipt = async (file, allowedCatego
       body: JSON.stringify({
         model,
         messages: [
-          { role: 'system', content: buildReceiptSystemPrompt(allowedCategories) + JSON_RULE },
+          {
+            role: 'system',
+            content: buildReceiptSystemPrompt(allowedCategories) + receiptJsonRule,
+          },
           {
             role: 'user',
             content: [
@@ -60,7 +150,7 @@ export const readReceiptWithOpenRouter: ReadReceipt = async (file, allowedCatego
             schema: jsonReceiptSchema(allowedCategories),
           },
         },
-        max_tokens: MAX_TOKENS,
+        max_tokens: RECEIPT_MAX_TOKENS,
         temperature: 0,
       }),
       ...(options?.signal ? { signal: options.signal } : {}),

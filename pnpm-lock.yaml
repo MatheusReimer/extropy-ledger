@@ -47,9 +47,6 @@ importers:
       '@google/genai':
         specifier: ^2.20.0
         version: 2.20.0(supports-color@7.2.0)
-      groq-sdk:
-        specifier: ^1.6.0
-        version: 1.6.0
       jose:
         specifier: ^6.1.0
         version: 6.2.10
@@ -1739,10 +1736,6 @@ packages:
   google-logging-utils@1.1.3:
     resolution: {integrity: sha512-eAmLkjDjAFCVXg7A1unxHsLf961m6y17QFqXqAXGj/gVkKFrEICfStRfwUlGNfeCEjNRa32JEWOUTlYXPyyKvA==}
     engines: {node: '>=14'}
-
-  groq-sdk@1.6.0:
-    resolution: {integrity: sha512-ggMgo6n84aZdNObgkSbSxWrdAq4wABsViIRb5e4N15bMUtDLZVhqlgZOI7X4TeqdBMdaVUOuUdZxAZIp06u0vw==}
-    hasBin: true
 
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
@@ -4256,8 +4249,6 @@ snapshots:
       - supports-color
 
   google-logging-utils@1.1.3: {}
-
-  groq-sdk@1.6.0: {}
 
   has-flag@4.0.0: {}
 

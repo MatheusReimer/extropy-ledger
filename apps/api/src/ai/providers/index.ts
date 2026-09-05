@@ -1,7 +1,6 @@
 import { describeError, logger } from '../../lib/logger.js';
 import { askGemini, readReceiptWithGemini } from './gemini.js';
-import { askGroq } from './groq.js';
-import { readReceiptWithOpenRouter } from './openrouter.js';
+import { askOpenRouter, readReceiptWithOpenRouter } from './openrouter.js';
 import type { AskModel, Provider, ReadReceipt } from './types.js';
 
 export type {
@@ -24,7 +23,7 @@ const DEFAULT_BUDGET: ChainBudget = { totalMs: 8_000, perProviderMs: 4_000 };
 
 const PROVIDERS: readonly Provider[] = [
   { name: 'gemini', ask: askGemini },
-  { name: 'groq', ask: askGroq },
+  { name: 'openrouter', ask: askOpenRouter },
 ];
 
 export function firstAnswerFrom(
