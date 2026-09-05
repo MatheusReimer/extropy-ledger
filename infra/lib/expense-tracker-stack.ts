@@ -33,7 +33,7 @@ export class ExpenseTrackerStack extends Stack {
       entry: path.join(repoRoot, 'apps/api/src/lambda.ts'),
       handler: 'handler',
       runtime: Runtime.NODEJS_22_X,
-      memorySize: 1024,
+      memorySize: 512,
       timeout: Duration.seconds(30),
       environment: {
         NODE_OPTIONS: '--enable-source-maps',

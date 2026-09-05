@@ -62,13 +62,24 @@ describe('both variants', () => {
    *
    * Lambda scales vCPU with memory, and the slowest thing on the critical path
    * is the scrypt password hash - deliberately expensive, and entirely CPU
-   * bound. At 512 MB it had roughly a third of a core and dominated a login.
+   * bound. 1024 MB is the value this deserves, and the stack asked for it.
+   *
+   * It is 512 because the account will not allow more: a deploy at 1024 fails
+   * with "'MemorySize' value failed to satisfy constraint: Member must have
+   * value less than or equal to 512" - the same new-account restriction that
+   * keeps this deployment off CloudFront. Asserting 1024 would have pinned a
+   * number that cannot be deployed, which is worse than pinning the real one.
+   *
+   * The cost is login latency, not correctness: scrypt runs at the same cost
+   * factor either way, it just gets less CPU to do it with. Measured against
+   * the deployed API, a login is ~1.0 s. Raise both this and the stack together
+   * if the quota is ever lifted.
    */
   it.each([true, false])(
-    'gives the function enough CPU to hash a password (lambdaOnly=%s)',
+    'gives the function as much CPU as the account allows (lambdaOnly=%s)',
     (only) => {
       synth(only).hasResourceProperties('AWS::Lambda::Function', {
-        MemorySize: 1024,
+        MemorySize: 512,
         Timeout: 30,
       });
     },

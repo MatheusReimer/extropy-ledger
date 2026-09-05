@@ -1057,6 +1057,27 @@ retention is capped at one week, and CloudFront's 1 TB/month egress is perpetual
 free indefinitely, and the Gemini free tier needs no card. The whole stack runs at zero
 marginal cost — the rule pre-pass keeps it well inside the free tier's rate limits too.
 
+### The other new-account restriction: 512 MB of Lambda
+
+On Lambda, **memory is a CPU setting**. vCPU scales with it, and the slowest thing on the
+critical path is the scrypt password hash — deliberately expensive and entirely CPU-bound. The
+stack asked for 1024 MB for that reason.
+
+This account will not allow it:
+
+```
+'MemorySize' value failed to satisfy constraint:
+Member must have value less than or equal to 512
+```
+
+Same family of new-account restriction as the CloudFront one above, and the same answer: deploy
+what the account permits and say so, rather than pin a number that cannot ship. It runs at 512,
+and `infra/tests/stack.test.ts` asserts 512 so the template and the account agree.
+
+**What it costs:** a login is ~1.0 s against the deployed API, and scrypt dominates that. The
+cost factor is unchanged, so nothing about the hashing is weaker — it simply gets less CPU. If
+the quota is lifted, raise the stack and the assertion together.
+
 ---
 
 ## Troubleshooting
