@@ -6,7 +6,7 @@ export const categorizeRequestSchema = z.object({
   amountCents: amountCentsSchema.optional(),
 });
 
-export const CATEGORIZE_SOURCES = ['rule', 'model', 'fallback'] as const;
+export const CATEGORIZE_SOURCES = ['model', 'fallback'] as const;
 export type CategorizeSource = (typeof CATEGORIZE_SOURCES)[number];
 
 export type CategorizeResult = {

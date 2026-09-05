@@ -58,7 +58,6 @@ const describeExtraction = (extracted: ExtractedExpense): string =>
   [extracted.merchant, extracted.description].filter(Boolean).join(' - ').slice(0, 72);
 
 const SOURCE_KEY: Record<CategorizeResult['source'], TranslationKey> = {
-  rule: 'form.sourceRule',
   model: 'form.sourceModel',
   fallback: 'form.sourceFallback',
 };

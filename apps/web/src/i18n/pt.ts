@@ -61,7 +61,6 @@ export const pt: Dictionary = {
   'form.cancel': 'Cancelar',
   'form.amountInvalid': 'Informe um valor como 12,50',
   'form.looking': 'Analisando a descrição…',
-  'form.sourceRule': 'estabelecimento conhecido',
   'form.sourceModel': 'sugerido automaticamente',
   'form.sourceFallback': 'nenhuma correspondência clara',
   'form.confident': '{percent}% de confiança',

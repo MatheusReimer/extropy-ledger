@@ -7,53 +7,64 @@ Back to the [README](../README.md).
 
 ---
 
-## Categorising a description: a three-step cascade
+## Categorising a description
 
-The centre of this submission is `POST /ai/categorize`, and specifically **when it decides not
-to call the model at all**.
+The centre of this submission is `POST /ai/categorize`, and the design has exactly two paths:
+**either the user picks the category, or the model suggests one.**
 
 ```
-description ──▶ ① rule pre-pass ───match───▶ { category, confidence: 0.95, source: "rule" }
-                      │ no match
-                      ▼
-                ② Gemini ──────────valid───▶ { category, confidence, source: "model" }
+description ──▶ ① Gemini ──────────valid───▶ { category, confidence, source: "model" }
                       │ 429 / 503 / timeout
                       ▼
-                ③ OpenRouter ──────valid───▶ { category, confidence, source: "model" }
+                ② OpenRouter ──────valid───▶ { category, confidence, source: "model" }
                       │ still nothing, or the 8s chain budget expired
                       ▼
-                ④ fallback ────────────────▶ { category: "Other", confidence: 0, source: "fallback" }
+                ③ fallback ────────────────▶ { category: "Other", confidence: 0, source: "fallback" }
 ```
 
 Measured on real descriptions, with both keys set:
 
 ```
-    0ms  rule      Dining      95%  "Starbucks downtown"
-    0ms  rule      Dining      95%  "Uber Eats dinner"
   771ms  model     Other       40%  "Zorblatt Industries consulting retainer"
-    0ms  rule      Dining      95%  "Padaria on the corner, bread and coffee"
-    0ms  rule      Transport   95%  "Two tickets, night bus to Curitiba"
   657ms  model     Shopping    90%  "Replacement charger for the laptop"
-    0ms  rule      Education   95%  "Tuition instalment for the design course"
+  332ms  model     Health      95%  "Osteopath appointment"
+  489ms  model     Travel      95%  "Airbnb Lisbon three nights"
 ```
 
-Five of seven answered in under a millisecond having never left the process. Note
-the 40% on the deliberately vague one against 90% on the clear one — the
-confidence instruction is doing real work, and the UI uses it.
+Note the 40% on the deliberately vague one against 90% on the clear one — the confidence
+instruction is doing real work, and the UI uses it: a low-confidence answer is offered rather
+than preselected.
 
-**① The rule pre-pass** (`ai/rules.ts`) is 122 merchant keywords and phrases across the ten
-predefined categories. "Starbucks" is not a natural-language problem — it is a table lookup.
-Spending 300 ms and a paid API call to learn that coffee is Dining is using AI where
-`Set.has` already answers, so the common case never leaves the process.
+### The keyword pre-pass I removed
 
-Phrases are matched **before** single words, for one concrete reason: `"uber eats"` contains
-`"uber"`. Word-first matching would file a dinner under Transport at 95% confidence, and a
-_confidently wrong_ answer is worse than no suggestion. There is a test pinning exactly that.
+There used to be a `①` in front of Gemini: 122 merchant keywords across the ten predefined
+categories, so "Starbucks" resolved to Dining by table lookup without a provider call. Measured
+across a realistic month it answered about 80% of entries for free and in microseconds, and it
+made the app work end to end with no API key at all.
 
-**② and ③, the providers**, are asked only about what is genuinely ambiguous — an unknown
-merchant, free text, a description a lookup table will never cover.
+It came out anyway, and the reasoning is worth recording because it is not a performance
+argument:
 
-**④ The fallback** guarantees the feature can never block someone from recording an expense.
+- **It was a third path in a two-path product.** The feature people understand is "type it
+  yourself, or let the AI suggest." A hidden keyword table that sometimes answers first is a
+  behaviour neither of those explains — and the source badge showing "matched a known merchant"
+  was explaining an implementation detail to someone who did not ask.
+- **It could never be complete**, so it always needed the model behind it. It optimised the
+  common case at the cost of a second code path, a normalizer, an ordering rule
+  (phrases-before-words, because `"uber eats"` contains `"uber"`) and a maintenance burden that
+  grows with every merchant that changes its name.
+- **Simplicity has a value that does not show up in a benchmark.** `categorize.ts` is 24 lines
+  now, and there is one sentence that explains it.
+
+What was genuinely lost: provider calls that used to cost nothing now cost a call and ~400 ms,
+the free-tier quota is consumed faster, and with no key configured the suggestion feature is
+inert rather than partially working. Per-user rate limiting moved up the "what I'd do next"
+list because of it, and a per-user cache of confirmed description-to-category pairs would buy
+most of the saving back without a hand-written list.
+
+**① and ②, the providers**, answer everything now.
+
+**③ The fallback** guarantees the feature can never block someone from recording an expense.
 The AI is an adviser, not a dependency: no provider ever rethrows.
 
 ## Why two providers
@@ -106,9 +117,9 @@ run is not a latency guarantee:
   per-provider 4-second slice below exists to cut off — the request is abandoned, the rule
   fallback answers, and the user is told there was no confident match rather than made to wait.
 - **One vendor now backs both features**, so a single outage or exhausted quota takes out both
-  fallbacks rather than one. Gemini remains first on both paths and the rule table still answers
-  with no provider at all, so the floor is unchanged; the middle rung is simply less redundant
-  than it was.
+  fallbacks rather than one. Gemini remains first on both paths, and a failed suggestion never blocks
+  anyone — the category dropdown is always there — so the floor is unchanged; the middle rung is
+  simply less redundant than it was.
 
 Model choice was measured too, not assumed. Of the four free models advertising structured
 output, `nemotron-3-super-120b` answered 8/8 schema-valid and agreed with the expected category
@@ -176,11 +187,11 @@ descriptions repeat, the answer depends only on the text and the category list, 
 call costs 700 ms at best. It survived review until someone asked how often a description would
 actually repeat between two requests. It does not hold up.
 
-**The rule pre-pass eats every repeat worth having.** Starbucks, Uber, Netflix — the merchants
-that recur — are answered by the keyword table and never reach a provider. So the cache could
-only ever hold descriptions that missed all 122 keywords: the long tail, which is by definition
-the set least likely to repeat. The cache stored exactly the entries with the lowest chance of a
-second hit.
+**It stored the entries least likely to repeat.** At the time there was also a keyword pre-pass
+in front of it, so the cache could only ever hold descriptions that missed all 122 keywords —
+the long tail, which is by definition the set least likely to come back. (The pre-pass has since
+been removed too, for different reasons; a cache is worth revisiting now that every description
+reaches a provider, but it would need to be per-user and keyed on the amount as well.)
 
 **Three more conditions had to hold at once** for a hit: the same warm container, an unchanged
 category list, and a repeat that the client had not already absorbed — `ExpenseForm` skips a
@@ -209,10 +220,11 @@ records — a production deployment belongs on a paid tier.
 
 ## Running without an API key
 
-Both keys are optional, **independently**. With neither, the whole app still runs: the model
-steps are skipped and categorisation answers from rules and the fallback, reporting the true
-`source` either way. With one, you get that provider. With both, you get the chain. You can
-review this project end to end without signing up for anything.
+Both keys are optional, **independently**. With neither, the whole app still runs — you just
+type the category yourself, which is the normal path anyway. The suggestion is an assistant, not
+a requirement, so its absence costs a dropdown selection and nothing else. With one key you get
+that provider; with both you get the chain. You can review the app end to end without signing up
+for anything, though you will want at least one key to see the AI features do their job.
 
 ---
 
@@ -317,16 +329,16 @@ mean inventing an exchange rate.
 
 ## The honest asymmetry
 
-There is no rule pre-pass on this path, and the absence is real rather than an oversight:
+The two AI features share a vendor but not a shape, and the difference is real rather than an
+oversight. **Reading an image fails for different reasons than classifying a string**, so the
+receipt ladder tries a second Gemini _model_ before it tries a second vendor — a congested model
+is the common failure, and a different model is a different queue.
 
-- **No rule pre-pass**, because there is no cheap deterministic shortcut for reading a
-  photograph. `Set.has` answers "is Starbucks dining?"; nothing answers "what does this image
-  say" without a model. Inventing a first step here would be architecture for its own sake.
-- **The second provider is reached differently** from the categorisation chain. Reading an
-  image fails for different reasons than classifying a string, so the ladder below tries a
-  second Gemini _model_ before it tries a second vendor. That asymmetry is why `ReadReceipt` is
-  a separate type from `AskModel`: it lives in the type system instead of surfacing as a
-  runtime surprise.
+That is also why `ReadReceipt` is a separate type from `AskModel`. A failed classification is
+simply "no suggestion"; a failed read has to distinguish _"I read it and could not make sense of
+it"_ from _"I never reached a model"_, because only the first should ask the user for a clearer
+photo. Keeping them as separate types puts that distinction in the type system instead of
+leaving it to surface as a runtime surprise.
 
 ## Two rungs, answering two different failures
 

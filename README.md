@@ -25,7 +25,7 @@ Built for the Extropy full-stack home challenge: **Option 1 (Personal Expense Tr
 **Prerequisites:** Node **≥ 22** (matches the `nodejs22.x` Lambda runtime) and pnpm **11.x**
 (`corepack enable` picks up the pinned version). A MongoDB connection string — Atlas M0 or a
 local `mongod`. AWS CLI v2 only if you intend to deploy. LLM API keys are **all optional** and
-all free; without them the app still runs end to end, falling back to the rule table.
+all free; without them the app still runs — you just type the category yourself.
 
 ```bash
 pnpm install
@@ -63,7 +63,7 @@ once rather than failing later inside a request.
                                         │  One Lambda     │───────▶│ MongoDB Atlas│
                                         │  (Node 22, ESM) │        │  (M0 free)   │
                                         └────────┬────────┘        └──────────────┘
-                                                 │  only when a rule can't answer
+                                                 │  to suggest a category
                                      Gemini → OpenRouter (provider chain)
 
 apps/api      Lambda handlers, routing, data access, the AI categorizer
@@ -92,26 +92,25 @@ No API URL in the build, no CORS in the browser, no "works locally, breaks deplo
 
 ## The AI feature, in short
 
-The centre of this submission is `POST /ai/categorize`, and specifically **when it decides not
-to call the model at all**:
+Categorising an expense has exactly two paths, and that is the whole design: **either you pick
+the category yourself, or you let the model suggest one.**
 
 ```
-description ──▶ ① rule pre-pass ───match───▶ { category, confidence: 0.95, source: "rule" }
-                      │ no match
-                      ▼
-                ② Gemini ──────────valid───▶ { category, confidence, source: "model" }
-                      │ 429/5xx/invalid
-                      ▼
-                ③ OpenRouter ──────valid───▶ { category, confidence, source: "model" }
-                      │ still nothing
-                      ▼
-                ④ { category: "Other", confidence: 0, source: "fallback" }
+description ──▶ Gemini ──────valid───▶ { category, confidence, source: "model" }
+                   │ 429 / 5xx / invalid
+                   ▼
+                OpenRouter ──valid───▶ { category, confidence, source: "model" }
+                   │ still nothing
+                   ▼
+                { category: "Other", confidence: 0, source: "fallback" }
 ```
 
-A 122-keyword table answers every recurring merchant for free in under a millisecond; the model
-is for the long tail; the response always says which rung answered. Uploading a receipt goes
-further — Gemini reads the document via `inlineData`, no PDF parser and no OCR library, and
-pre-fills the form for you to confirm. Nothing is auto-saved.
+`categorize.ts` is 24 lines: ask the model, accept the answer only if it is a category this user
+actually has, otherwise fall back. A fallback **preselects nothing** — offering "Other" at zero
+confidence would be faking an answer, and the dropdown is right there.
+
+Uploading a receipt goes further — Gemini reads the document via `inlineData`, no PDF parser and
+no OCR library, and pre-fills the form for you to confirm. Nothing is auto-saved.
 
 **Prompt engineering, in four decisions.** The prompt is short because this call happens while
 someone is looking at a form, and every extra token is latency they feel.
@@ -125,10 +124,10 @@ someone is looking at a form, and every extra token is latency they feel.
 4. **The output is revalidated anyway** — a response truncated at the token limit is valid UTF-8
    and invalid JSON, and this path ends in a database write.
 
-**Cost and latency.** Rules first. The model is asked **on blur, not per keystroke**, and
-skipped once the user picks a category. The chain shares an 8-second budget with a 4-second
-slice per provider: past that, the dropdown is faster than waiting, so falling back is correct
-rather than a degradation.
+**Cost and latency.** The model is asked **on blur, not per keystroke**, and skipped entirely
+once the user has picked a category — if they have decided, there is nothing to suggest. The
+chain shares an 8-second budget with a 4-second slice per provider: past that, the dropdown is
+faster than waiting, so falling back is correct rather than a degradation.
 
 **[The full write-up](docs/ai.md)** covers the provider measurements, the cache I removed, the
 receipt-reader ladder, and the bugs only a live API call could have revealed.
@@ -209,8 +208,8 @@ pnpm format:check  # prettier
 pnpm check         # all four
 ```
 
-Tests go where a bug would be **silent and expensive**: that a rule short-circuits without
-calling the model, that a stalled provider cannot starve the next one, that an `alg: none`
+Tests go where a bug would be **silent and expensive**: that a stalled provider cannot starve
+the next one, that a suggestion is never a category the user does not have, that an `alg: none`
 forgery is refused, that an unknown email and a wrong password are byte-identical, that a
 missing exchange rate stays `undefined` instead of becoming a silent 1.0, that a renamed `.exe`
 is not an image, and that a CSV cell cannot smuggle a spreadsheet formula.
@@ -279,7 +278,8 @@ Change `PORT` in `.env` and restart `pnpm dev`; the Vite proxy reads its target 
 sure `VITE_API_URL` is **empty** — a stale value there overrides the proxy.
 
 **Categorisation always answers `source: "fallback"`.**
-No provider key is set (by design — the rule table still works), or both are failing. The log
+No provider key is set, or both providers are failing. Without a key the feature is simply
+inert — you pick the category yourself, which is the normal path anyway. The log
 names the provider and status on every failure.
 
 **A model name returns 404 or `model_not_found`.**
@@ -306,11 +306,13 @@ Roughly in the order I would pick them up:
    does not apply. The one genuine security improvement outstanding.
 2. **Integration tests in CI** against `mongodb-memory-server`, promoting the manual end-to-end
    pass into the suite.
-3. **Per-user rate limiting on `/ai/categorize`.** The rule pre-pass bounds normal use; a
-   hostile authenticated user is a different question, and the free-tier quota is shared.
+3. **Per-user rate limiting on `/ai/categorize`.** Every categorisation is now a provider call,
+   so a hostile authenticated user could burn a quota that is shared across the deployment.
+   This moved up the list when the keyword pre-pass came out.
 4. **Secrets via SSM Parameter Store**, read at cold start.
-5. **Grow the rule table from real data.** Every `source: "model"` hit is a merchant the table
-   does not know — logging the misses makes the cascade get _cheaper_ the more it is used.
+5. **Cache repeated descriptions per user.** The same merchant typed twice is the same answer;
+   a small per-user store of confirmed description-to-category pairs would cut provider calls
+   without the maintenance burden of a hand-written keyword list.
 6. **Move receipt storage to S3.** Fine at demo scale, wrong at any other: a 512 MB free cluster
    holds very few 4 MB documents.
 7. **Pagination on `/expenses`.** Capped at 100 rows today. Honest, not a long-term answer.

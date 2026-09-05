@@ -1,41 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PREDEFINED_CATEGORIES } from '@expense/shared';
 import { categorize } from '../src/ai/categorize.js';
-import { matchRule } from '../src/ai/rules.js';
 import { parseModelCategory, parseModelResponse } from '../src/ai/parse.js';
 import { firstAnswerFrom } from '../src/ai/providers/index.js';
 import type { Provider } from '../src/ai/providers/types.js';
 
 const CATEGORIES = [...PREDEFINED_CATEGORIES];
-
-describe('matchRule', () => {
-  it('matches a single-word merchant', () => {
-    expect(matchRule('Starbucks downtown')).toBe('Dining');
-  });
-
-  it('is case and punctuation insensitive', () => {
-    expect(matchRule('  NETFLIX!! ')).toBe('Entertainment');
-  });
-
-  /**
-   * The case that motivates the phrases-before-words ordering: "uber eats"
-   * contains "uber". If this test ever returns Transport, the cascade is back to
-   * being confidently wrong - which is worse than offering nothing.
-   */
-  it('prefers a multi-word phrase over a word it contains', () => {
-    expect(matchRule('Uber Eats dinner')).toBe('Dining');
-    expect(matchRule('Uber ride home')).toBe('Transport');
-  });
-
-  it('returns undefined for something it has never seen', () => {
-    expect(matchRule('Zorblatt Industries invoice')).toBeUndefined();
-  });
-
-  it('does not match a keyword hidden inside another word', () => {
-    // "cart" contains "car"; exact-token matching prevents the false positive.
-    expect(matchRule('shopping cart repair')).not.toBe('Transport');
-  });
-});
 
 describe('parseModelCategory', () => {
   it('canonicalises casing to the allowed spelling', () => {
@@ -96,25 +66,13 @@ describe('parseModelResponse', () => {
   });
 });
 
-describe('categorize cascade', () => {
-  it('never calls the model when a rule already answers', async () => {
-    const askModel = vi.fn();
-    const result = await categorize({ description: 'Starbucks' }, CATEGORIES, { askModel });
-
-    expect(result).toEqual({ category: 'Dining', confidence: 0.95, source: 'rule' });
-    // This assertion IS the feature: it is what proves most expenses never
-    // cost a paid API call.
-    expect(askModel).not.toHaveBeenCalled();
-  });
-
-  it('asks the model only when no rule matches', async () => {
+describe('categorize', () => {
+  it('asks the model and reports the answer as its own', async () => {
     const askModel = vi.fn().mockResolvedValue({ category: 'Housing', confidence: 0.7 });
     const result = await categorize(
       { description: 'Quarterly payment to Vandelay Industries' },
       CATEGORIES,
-      {
-        askModel,
-      },
+      { askModel },
     );
 
     expect(askModel).toHaveBeenCalledOnce();
@@ -152,8 +110,9 @@ describe('categorize cascade', () => {
     const askModel = vi.fn().mockResolvedValue({ category: 'Dining', confidence: 0.9 });
     const limited = ['Food', 'Other'];
 
-    // The rule would say "Dining" and so would the model - but this user does
-    // not have that category, so the only valid answer is the fallback.
+    // The model says "Dining", but this user does not have that category, so
+    // the only valid answer is the fallback. A suggestion the user cannot
+    // accept is worse than no suggestion.
     const result = await categorize({ description: 'Starbucks' }, limited, { askModel });
     expect(limited).toContain(result.category);
     expect(result).toEqual({ category: 'Other', confidence: 0, source: 'fallback' });

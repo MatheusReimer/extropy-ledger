@@ -59,7 +59,6 @@ export const en = {
   'form.cancel': 'Cancel',
   'form.amountInvalid': 'Enter an amount like 12.50',
   'form.looking': 'Looking at the description…',
-  'form.sourceRule': 'matched a known merchant',
   'form.sourceModel': 'suggested automatically',
   'form.sourceFallback': 'no confident match',
   'form.confident': '{percent}% confident',
