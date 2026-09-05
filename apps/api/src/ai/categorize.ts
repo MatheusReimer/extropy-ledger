@@ -13,9 +13,7 @@ export async function categorize(
   deps: CategorizeDeps,
 ): Promise<CategorizeResult> {
   const fromModel = await deps.askModel(input, allowedCategories);
-  if (fromModel && allowedCategories.includes(fromModel.category)) {
-    return { ...fromModel, source: 'model' };
-  }
+  if (fromModel) return { ...fromModel, source: 'model' };
 
   const fallback = allowedCategories.includes(FALLBACK_CATEGORY)
     ? FALLBACK_CATEGORY

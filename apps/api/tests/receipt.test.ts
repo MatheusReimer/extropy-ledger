@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PREDEFINED_CATEGORIES } from '@expense/shared';
 import { decodeUpload, sniffMimeType } from '../src/lib/files.js';
 import { parseExtractedExpense } from '../src/ai/receipt-parse.js';
-import { extractExpense, toDescription } from '../src/ai/extract.js';
+import { extractExpense } from '../src/ai/extract.js';
 import { readReceiptWithOpenRouter } from '../src/ai/providers/openrouter.js';
 
 const CATEGORIES = [...PREDEFINED_CATEGORIES];
@@ -296,30 +296,5 @@ describe('the OpenRouter reader sends each file type the way that vendor accepts
 
     expect(userContent(body).map((part) => part.type)).toContain('image_url');
     expect(body['plugins']).toBeUndefined();
-  });
-});
-
-describe('toDescription', () => {
-  const base = {
-    merchant: 'Verde Cafe',
-    description: 'espresso blend, oat milk',
-    amountCents: 1,
-    currency: 'BRL',
-    date: null,
-    category: null,
-    confidence: 1,
-  };
-
-  it('joins merchant and summary the way a person would write it', () => {
-    expect(toDescription(base)).toBe('Verde Cafe - espresso blend, oat milk');
-  });
-
-  it('uses whichever half it has', () => {
-    expect(toDescription({ ...base, description: null })).toBe('Verde Cafe');
-    expect(toDescription({ ...base, merchant: null })).toBe('espresso blend, oat milk');
-  });
-
-  it('is empty when it has neither', () => {
-    expect(toDescription({ ...base, merchant: null, description: null })).toBe('');
   });
 });

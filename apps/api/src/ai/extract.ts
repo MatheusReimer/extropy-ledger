@@ -1,4 +1,4 @@
-import { sanitizeText, type ExtractedFields } from '@expense/shared';
+import { sanitizeText } from '@expense/shared';
 import type { ReceiptMimeType } from '@expense/shared';
 import type { ReadOutcome } from './providers/types.js';
 
@@ -26,13 +26,4 @@ export async function extractExpense(
         outcome.fields.description === null ? null : sanitizeText(outcome.fields.description, 200),
     },
   };
-}
-
-const DESCRIPTION_DISPLAY_MAX = 72;
-
-export function toDescription(extracted: ExtractedFields): string {
-  const parts = [extracted.merchant, extracted.description].filter((part): part is string =>
-    Boolean(part),
-  );
-  return sanitizeText(parts.join(' - '), DESCRIPTION_DISPLAY_MAX);
 }

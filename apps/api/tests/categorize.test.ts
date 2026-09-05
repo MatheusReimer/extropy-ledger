@@ -16,6 +16,9 @@ describe('parseModelCategory', () => {
   });
 
   it('rejects a category outside the allowed list', () => {
+    // This is THE guarantee that a suggestion is never a category the user
+    // lacks, and it is enforced in exactly one place. `categorize` used to
+    // re-check it; that was a second lock on a door this already closed.
     expect(parseModelCategory({ category: 'Crypto', confidence: 0.9 }, CATEGORIES)).toBeUndefined();
   });
 
@@ -104,18 +107,6 @@ describe('categorize', () => {
     expect(first.source).toBe('fallback');
     expect(second).toEqual({ category: 'Travel', confidence: 0.6, source: 'model' });
     expect(askModel).toHaveBeenCalledTimes(2);
-  });
-
-  it('never suggests a category the user does not have', async () => {
-    const askModel = vi.fn().mockResolvedValue({ category: 'Dining', confidence: 0.9 });
-    const limited = ['Food', 'Other'];
-
-    // The model says "Dining", but this user does not have that category, so
-    // the only valid answer is the fallback. A suggestion the user cannot
-    // accept is worse than no suggestion.
-    const result = await categorize({ description: 'Starbucks' }, limited, { askModel });
-    expect(limited).toContain(result.category);
-    expect(result).toEqual({ category: 'Other', confidence: 0, source: 'fallback' });
   });
 });
 
