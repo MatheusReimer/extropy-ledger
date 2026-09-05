@@ -345,14 +345,14 @@ leaving it to surface as a runtime surprise.
 Reading a receipt goes Gemini first, then a different vendor entirely. The two rungs are not
 redundancy for its own sake - they fail for different reasons:
 
-| Rung                          | Survives                                                 | Does not survive                     |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------------ |
-| **Gemini, two models hedged** | a congested or slow model — the common case by far       | anything that takes the account down |
-| **OpenRouter**                | a revoked key, an exhausted daily quota, a Google outage | nothing left after this              |
+| Rung           | Survives                                                 | Does not survive                     |
+| -------------- | -------------------------------------------------------- | ------------------------------------ |
+| **Gemini**     | a congested model — one retry rides it out               | anything that takes the account down |
+| **OpenRouter** | a revoked key, an exhausted daily quota, a Google outage | nothing left after this              |
 
-Hedging two models of the same vendor was never a defence against a bad key or a spent quota:
-all of Google's models die together. That is the gap this second vendor closes, and it is worth
-stating plainly rather than implying that "two models" meant "two providers".
+A retry against the same vendor was never a defence against a bad key or a spent quota: all of
+Google's models die together. That is the gap the second vendor closes, and it is worth stating
+plainly rather than implying that retrying counts as redundancy.
 
 OpenRouter rather than a named vendor because it is one key across many models, several of them
 free and image-capable, so trading the model later is an env var rather than a new adapter. The
@@ -393,76 +393,41 @@ And one bug this chain reintroduced, caught by running it rather than reasoning 
 single shared deadline, a slow-but-healthy Gemini spent the entire 25-second budget, so the
 signal was already aborted when the fallback's turn came and it was never asked. The reader
 reported `unavailable` while a working second vendor sat untouched. Gemini now gets a
-**15-second slice** — above its hedged worst case of 10.7s — leaving the remainder for the
-fallback. It is the same lesson as the categorisation chain, one level up: a fallback the primary
+**15-second slice**, leaving the remainder for the fallback. It is the same lesson as the categorisation chain, one level up: a fallback the primary
 can starve is not a fallback.
 
-Two behaviours worth knowing. `unreadable` deliberately does **not** fall through: if both
-Gemini models looked and agreed the document holds no expense, that is an answer about the
-document, and a third opinion is latency spent to be told the same thing. And with no
-`OPENROUTER_API_KEY` the rung reports `unavailable` immediately, so the app behaves exactly as
-it did before - there is a test for precisely that.
+Two behaviours worth knowing. `unreadable` deliberately does **not** fall through: if Gemini
+looked and found no expense in the document, that is an answer about the document rather than
+about Google's availability, and a second opinion is latency spent to be told the same thing.
+And with no `OPENROUTER_API_KEY` the rung reports `unavailable` immediately, so the app behaves
+exactly as it did before - there is a test for precisely that.
 
-## A second model, before the second vendor
+## The second Gemini model I removed
 
-Before the receipt path leaves Google at all, it tries a second Gemini **model**, and on the
-free tier that is not a token gesture: while benchmarking, one model returned 503 in the same
-minute another answered in a second. Google pools capacity per model, so a different model is
-a different queue — and it is a cheaper rung than a different vendor, so it comes first.
+There used to be a rung between those two: a **second Gemini model**, started in parallel with
+the first after a 6-second delay. Google pools capacity per model, so a different model is a
+different queue — while benchmarking, one returned 503 in the same minute another answered in a
+second. It measurably helped.
 
-Two models, up to two attempts each, and the two loops answer different questions:
+It came out anyway, and the reason is that **it was built before OpenRouter existed.** At the
+time it was the only fallback a receipt had; a second Gemini model was the only second opinion
+available. Once a genuine second vendor sat behind it, the middle rung was buying a narrower
+version of what the rung below it already covered.
 
-- **Retrying the same model** is only worth it when the failure could genuinely go the other
-  way — congestion clears in 700 ms, a 404 will not. So `isTransient` governs the inner loop.
-- **Moving to the next model** is worth it for _any_ failure, including a flat "no expense
-  here" — because a different model has different vision.
+What it cost to keep was not latency but comprehension. The hedge was a `Promise.race` against a
+timer, an array of `AbortController`s, a `firstRead` helper resolving on the first success, and a
+reconciliation pass deciding whether "one model found nothing and the other was never reached"
+should be reported as `unreadable` or `unavailable`. About 110 lines, and the hardest thing in
+this codebase to explain out loud.
 
-That second point was a bug I had to be argued out of. The first version stopped dead on
-`unreadable`, reasoning that re-reading a document a model had already rejected buys nothing
-but latency. True of the **same** model; false of a different one — so the one rung that could
-actually rescue a marginal photo was precisely the rung being skipped. Whose fault a failure
-is and whether repeating the call is worthwhile are two questions, and collapsing them into
-one flag is what hid this.
+Gemini now gets one model and one retry on a congested response — a `for` loop — and anything it
+cannot answer goes to the other vendor.
 
-## The failure was latency, not availability
-
-A user reported the 503 firing in normal use, so I measured before changing anything - and ten
-reads of the same receipt came back **2.3, 2.6, 3.2, 3.5, 4.0, 4.6, 5.4, 5.6, 14.6 and 27.4
-seconds**. Nothing was rate-limited; every call succeeded. The median is under four seconds and
-the tail runs past twenty.
-
-Against a 25-second budget, run strictly in sequence, that 27.4s call ate the entire allowance
-and the fallback was never asked. A working model, a legible receipt, and the app still said
-"the reader is busy". Two 14-second calls would have done the same thing.
-
-So the models are **hedged** rather than merely sequenced: the fallback starts alongside the
-primary once the primary has been running for six seconds - above the median on purpose, so the
-common case still costs one request and only the slow tail pays for two - and the first usable
-read wins. The loser is cancelled, and a cancelled hedge logs as `cancelled`, not as a failure;
-a warning on the happy path is how logs stop being worth reading.
-
-`Promise.all` was the wrong tool here and hid the bug it was meant to fix: it waits for the
-slowest, so a hanging primary held up an answer the fallback already had. Waiting for the rest
-is only needed to tell "nobody could read it" from "nobody could be reached".
-
-Measured against the live API, twelve consecutive reads:
-
-|                      | Before (sequential) | After (hedged) |
-| -------------------- | ------------------- | -------------- |
-| p50                  | ~4 s                | **3.7 s**      |
-| p90                  | —                   | **10.3 s**     |
-| Slowest              | **27.4 s**          | **10.7 s**     |
-| Over the 25 s budget | yes                 | **none**       |
-
-And the ladder's other guarantees, verified separately:
-
-| Scenario                   | Result                                            | Time   |
-| -------------------------- | ------------------------------------------------- | ------ |
-| Healthy primary            | read correctly, first model                       | 2.3 s  |
-| Primary is a dead model    | **recovered on the fallback**, same values        | 2.3 s  |
-| Primary finds no expense   | **second model asked**, both agree → `unreadable` | 5.8 s  |
-| Primary hangs indefinitely | **fallback answers**, primary cancelled           | < 12 s |
-| Every model unreachable    | `unavailable` → 503                               | 2.4 s  |
+**The starvation risk the hedge protected against is still handled**, one level up and more
+simply. `readReceipt` gives Gemini a **15-second slice** of the 25-second budget, so a stalled
+call is cut off with time to spare rather than consuming the lot. That is what actually stops a
+slow primary starving the fallback, and there is a test for it. The hedge was solving the same
+problem twice, in the harder place.
 
 ## Two failures, because they ask different things of the user
 

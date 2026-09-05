@@ -10,7 +10,6 @@ const envSchema = z.object({
 
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().min(1).default('gemini-3.5-flash-lite'),
-  GEMINI_FALLBACK_MODEL: z.string().min(1).default('gemini-3.1-flash-lite'),
 
   OPENROUTER_API_KEY: z.string().min(1).optional(),
   OPENROUTER_CATEGORIZE_MODEL: z.string().min(1).default('nvidia/nemotron-3-super-120b-a12b:free'),

@@ -61,9 +61,7 @@ const RECEIPT_MAX_OUTPUT_TOKENS = 1_024;
 
 const RETRY_DELAY_MS = 700;
 
-const ATTEMPTS_PER_MODEL = 2;
-
-const HEDGE_AFTER_MS = 6_000;
+const ATTEMPTS = 2;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -150,108 +148,29 @@ async function readOnce(
   }
 }
 
-type Attempted = { index: number; outcome: ReadOutcome };
+export const readReceiptWithGemini: ReadReceipt = async (file, allowedCategories, options) => {
+  const config = getConfig();
+  if (!config.GEMINI_API_KEY) return { status: 'unavailable' };
+  if (options?.signal?.aborted) return { status: 'unavailable' };
 
-function firstRead(attempts: readonly Promise<Attempted>[]): Promise<{
-  won?: Attempted;
-  all: Attempted[];
-}> {
-  return new Promise((resolve) => {
-    const all: Attempted[] = [];
-    let pending = attempts.length;
-    for (const attempt of attempts) {
-      void attempt.then((entry) => {
-        all.push(entry);
-        pending -= 1;
-        if (entry.outcome.status === 'ok') resolve({ won: entry, all });
-        else if (pending === 0) resolve({ all });
-      });
-    }
-  });
-}
-
-async function readWithModel(
-  model: string,
-  file: ReceiptFile,
-  allowedCategories: readonly string[],
-  apiKey: string,
-  signal: AbortSignal | undefined,
-): Promise<ReadOutcome> {
+  const model = config.GEMINI_MODEL;
   let verdict: ReadOutcome = { status: 'unavailable' };
 
-  for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt += 1) {
-    if (signal?.aborted) break;
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+    if (options?.signal?.aborted) break;
     if (attempt > 0) await sleep(RETRY_DELAY_MS);
 
-    const tried = await readOnce(model, file, allowedCategories, apiKey, signal);
+    const tried = await readOnce(
+      model,
+      file,
+      allowedCategories,
+      config.GEMINI_API_KEY,
+      options?.signal,
+    );
     verdict = tried.outcome;
 
     if (!tried.retrySameModel) break;
   }
 
   return verdict;
-}
-
-export const readReceiptWithGemini: ReadReceipt = async (file, allowedCategories, options) => {
-  const config = getConfig();
-  if (!config.GEMINI_API_KEY) return { status: 'unavailable' };
-
-  const models = [...new Set([config.GEMINI_MODEL, config.GEMINI_FALLBACK_MODEL])];
-  const apiKey = config.GEMINI_API_KEY;
-
-  if (options?.signal?.aborted) return { status: 'unavailable' };
-
-  const controllers = models.map(() => new AbortController());
-  const onAbort = () => controllers.forEach((controller) => controller.abort());
-  options?.signal?.addEventListener('abort', onAbort, { once: true });
-
-  const started = new Map<number, Promise<ReadOutcome>>();
-  const start = (index: number): Promise<ReadOutcome> => {
-    const existing = started.get(index);
-    if (existing) return existing;
-    const model = models[index];
-    const controller = controllers[index];
-    if (model === undefined || controller === undefined)
-      return Promise.resolve({ status: 'unavailable' });
-    const run = readWithModel(model, file, allowedCategories, apiKey, controller.signal);
-    started.set(index, run);
-    return run;
-  };
-
-  try {
-    const primary = start(0).then((outcome) => ({ index: 0, outcome }));
-    if (models.length === 1) return (await primary).outcome;
-
-    const hedgeTimer = sleep(HEDGE_AFTER_MS).then(() => 'hedge' as const);
-    const firstEvent = await Promise.race([primary, hedgeTimer]);
-
-    if (firstEvent !== 'hedge' && firstEvent.outcome.status === 'ok') {
-      return firstEvent.outcome;
-    }
-    if (firstEvent === 'hedge') logger.info('ai receipt hedged', { after: HEDGE_AFTER_MS });
-
-    const fallback = start(1).then((outcome) => ({ index: 1, outcome }));
-    const { won, all: settled } = await firstRead([primary, fallback]);
-
-    if (won) {
-      if (won.index > 0) logger.info('ai receipt recovered', { model: models[won.index] });
-      return won.outcome;
-    }
-
-    const foundNothing = settled.some((entry) => entry.outcome.status === 'unreadable');
-    const neverAnswered = settled.some((entry) => entry.outcome.status === 'unavailable');
-    const outcome: ReadOutcome =
-      foundNothing && !neverAnswered ? { status: 'unreadable' } : { status: 'unavailable' };
-
-    logger.warn('ai receipt found nothing', {
-      models: models.length,
-      outcome: outcome.status,
-      foundNothing,
-      neverAnswered,
-    });
-    return outcome;
-  } finally {
-    controllers.forEach((controller) => controller.abort());
-    options?.signal?.removeEventListener('abort', onAbort);
-  }
 };

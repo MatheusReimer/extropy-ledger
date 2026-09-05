@@ -37,11 +37,10 @@ const apiError = (status: number) => new ApiError({ message: `boom ${status}`, s
  * The provider memoises both its config and its client at module scope, so each
  * test needs a genuinely fresh module graph rather than a reset mock.
  */
-async function loadProvider(model: string, fallback: string) {
+async function loadProvider(model: string) {
   vi.resetModules();
   process.env['GEMINI_API_KEY'] = 'test-key';
   process.env['GEMINI_MODEL'] = model;
-  process.env['GEMINI_FALLBACK_MODEL'] = fallback;
   return import('../src/ai/providers/gemini.js');
 }
 
@@ -58,9 +57,9 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('the receipt reader ladder', () => {
-  it('stops at the first rung when the model answers', async () => {
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
+describe('reading a receipt with Gemini', () => {
+  it('reads the document and stops', async () => {
+    const { readReceiptWithGemini } = await loadProvider('primary');
 
     const outcome = await readReceiptWithGemini(FILE, CATEGORIES);
 
@@ -69,34 +68,28 @@ describe('the receipt reader ladder', () => {
   });
 
   /**
-   * The whole point of a second MODEL rather than a second provider: Google
-   * pools capacity per model, so a congested primary is not a congested account.
+   * A 429 or 5xx is congestion, and congestion is worth riding out once before
+   * spending a whole second vendor on it.
    */
-  it('reaches the fallback model when the primary keeps failing', async () => {
-    generateContent
-      .mockRejectedValueOnce(apiError(503))
-      .mockRejectedValueOnce(apiError(429))
-      .mockImplementationOnce(({ model }: { model: string }) => {
-        calls.push(model);
-        return Promise.resolve({ text: GOOD_JSON });
-      });
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
+  it('retries a congested model once, and takes the answer', async () => {
+    generateContent.mockRejectedValueOnce(apiError(503)).mockImplementationOnce(() => {
+      calls.push('primary');
+      return Promise.resolve({ text: GOOD_JSON });
+    });
+    const { readReceiptWithGemini } = await loadProvider('primary');
 
-    const outcome = await readReceiptWithGemini(FILE, CATEGORIES);
-
-    expect(outcome).toMatchObject({ status: 'ok' });
-    expect(calls).toEqual(['fallback']);
+    await expect(readReceiptWithGemini(FILE, CATEGORIES)).resolves.toMatchObject({ status: 'ok' });
+    expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
-  it('reports unavailable, not unreadable, once every rung is spent', async () => {
+  it('reports unavailable, not unreadable, once the retry is spent', async () => {
     generateContent.mockRejectedValue(apiError(503));
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
+    const { readReceiptWithGemini } = await loadProvider('primary');
 
     await expect(readReceiptWithGemini(FILE, CATEGORIES)).resolves.toEqual({
       status: 'unavailable',
     });
-    // Two models, two attempts each: congestion is worth riding out per model.
-    expect(generateContent).toHaveBeenCalledTimes(4);
+    expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
   /**
@@ -106,74 +99,31 @@ describe('the receipt reader ladder', () => {
    * version classified it as `unreadable` and the app told the user to take a
    * clearer photo of a perfectly good receipt. A request that THREW never got as
    * far as looking at the document, whatever the status code, so it can never be
-   * the document's fault.
+   * the document's fault. These are also not retried: the second attempt would
+   * fail identically.
    */
   it('never blames the document for an error the document was not involved in', async () => {
     for (const status of [400, 401, 403, 404]) {
+      generateContent.mockReset();
       generateContent.mockRejectedValue(apiError(status));
-      const { readReceiptWithGemini } = await loadProvider('retired-model', 'also-retired');
+      const { readReceiptWithGemini } = await loadProvider('retired-model');
 
       await expect(readReceiptWithGemini(FILE, CATEGORIES)).resolves.toEqual({
         status: 'unavailable',
       });
+      expect(generateContent).toHaveBeenCalledTimes(1);
     }
   });
 
   /**
-   * A second opinion on a marginal document.
-   *
-   * This is the hole the first version of the ladder had: it stopped dead on
-   * `unreadable`, on the reasoning that re-reading a rejected document buys
-   * nothing. True of the SAME model - but a different model has different vision,
-   * and the rung that could actually help was the one being skipped.
+   * A model that looked at the document and found nothing has given a real
+   * answer. Asking the same model again will not change it, so the retry loop
+   * stops - and `unreadable` is what escalates to the other vendor's different
+   * eyes, handled one describe down.
    */
-  it('asks a different model when the first one finds nothing', async () => {
-    generateContent
-      .mockResolvedValueOnce({ text: 'I could not find a receipt here.' })
-      .mockImplementationOnce(({ model }: { model: string }) => {
-        calls.push(model);
-        return Promise.resolve({ text: GOOD_JSON });
-      });
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
-
-    const outcome = await readReceiptWithGemini(FILE, CATEGORIES);
-
-    expect(outcome).toMatchObject({ status: 'ok' });
-    expect(calls).toEqual(['fallback']);
-  });
-
-  /** But it does not ask the SAME model twice - that answer will not change. */
   it('does not re-ask a model that already read the document and gave up', async () => {
     generateContent.mockResolvedValue({ text: 'no receipt here' });
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
-
-    await expect(readReceiptWithGemini(FILE, CATEGORIES)).resolves.toEqual({
-      status: 'unreadable',
-    });
-    // Once per model, not twice: two calls, not four.
-    expect(generateContent).toHaveBeenCalledTimes(2);
-  });
-
-  /**
-   * "Your receipt is illegible" is a claim, and it needs every model to have
-   * actually looked. One giving up while another was never reached does not
-   * support it - the unreached model might have read it perfectly well.
-   */
-  it('will not call a document unreadable when a model was never reached', async () => {
-    generateContent
-      .mockResolvedValueOnce({ text: 'no receipt here' })
-      .mockRejectedValue(apiError(503));
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
-
-    await expect(readReceiptWithGemini(FILE, CATEGORIES)).resolves.toEqual({
-      status: 'unavailable',
-    });
-  });
-
-  /** A misconfiguration that points both names at one model must not halve the ladder. */
-  it('does not collapse when both model names are the same', async () => {
-    generateContent.mockResolvedValue({ text: 'no receipt here' });
-    const { readReceiptWithGemini } = await loadProvider('same', 'same');
+    const { readReceiptWithGemini } = await loadProvider('primary');
 
     await expect(readReceiptWithGemini(FILE, CATEGORIES)).resolves.toEqual({
       status: 'unreadable',
@@ -181,42 +131,11 @@ describe('the receipt reader ladder', () => {
     expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
-  /**
-   * The failure a user actually reported, reproduced.
-   *
-   * Measured against the live API, one read in ten took 27.4s against a 25s
-   * budget while the median was under four. Run strictly in sequence, that one
-   * slow call consumed the entire allowance and the fallback was never asked -
-   * so a working model and a legible receipt still produced "the reader is
-   * busy". Hedging starts the fallback alongside a slow primary instead.
-   */
-  it('does not let a slow primary starve the fallback', async () => {
-    generateContent.mockImplementation(({ model }: { model: string }) => {
-      calls.push(model);
-      // Far longer than the hedge delay, and longer than any real budget.
-      if (model === 'slowpoke') return new Promise(() => {});
-      return Promise.resolve({ text: GOOD_JSON });
-    });
-    const { readReceiptWithGemini } = await loadProvider('slowpoke', 'fallback');
-
-    const started = Date.now();
-    const outcome = await readReceiptWithGemini(FILE, CATEGORIES);
-    const elapsed = Date.now() - started;
-
-    expect(outcome).toMatchObject({ status: 'ok' });
-    // The fallback answered while the primary was still hanging.
-    expect(calls).toContain('fallback');
-    // And it did not wait out the primary, which never resolves at all.
-    expect(elapsed).toBeLessThan(12_000);
-  }, 20_000);
-
   it('gives up promptly when the caller has already abandoned the request', async () => {
     generateContent.mockRejectedValue(apiError(503));
-    const { readReceiptWithGemini } = await loadProvider('primary', 'fallback');
+    const { readReceiptWithGemini } = await loadProvider('primary');
 
-    const outcome = await readReceiptWithGemini(FILE, CATEGORIES, {
-      signal: AbortSignal.abort(),
-    });
+    const outcome = await readReceiptWithGemini(FILE, CATEGORIES, { signal: AbortSignal.abort() });
 
     expect(outcome).toEqual({ status: 'unavailable' });
     expect(generateContent).not.toHaveBeenCalled();
@@ -250,7 +169,6 @@ describe('the receipt provider chain', () => {
     const { readReceipt } = await loadChain({
       GEMINI_API_KEY: 'test-key',
       GEMINI_MODEL: 'primary',
-      GEMINI_FALLBACK_MODEL: 'fallback',
       OPENROUTER_API_KEY: 'or-key',
     });
 
@@ -269,7 +187,6 @@ describe('the receipt provider chain', () => {
     const { readReceipt } = await loadChain({
       GEMINI_API_KEY: 'test-key',
       GEMINI_MODEL: 'primary',
-      GEMINI_FALLBACK_MODEL: 'fallback',
       OPENROUTER_API_KEY: 'or-key',
     });
 
@@ -283,8 +200,9 @@ describe('the receipt provider chain', () => {
 
   /**
    * The distinction that keeps the second vendor from being wasted latency.
-   * Two Gemini models looked at the document and agreed it holds no expense;
-   * that is an answer ABOUT the document, and a third opinion cannot change it.
+   * Gemini looked at the document and found no expense in it. That is an answer
+   * ABOUT the document rather than about Google's availability, so a second
+   * opinion is latency the user pays for nothing.
    */
   it('does not spend a second vendor on a document already judged unreadable', async () => {
     generateContent.mockResolvedValue({ text: 'no receipt here' });
@@ -292,7 +210,6 @@ describe('the receipt provider chain', () => {
     const { readReceipt } = await loadChain({
       GEMINI_API_KEY: 'test-key',
       GEMINI_MODEL: 'primary',
-      GEMINI_FALLBACK_MODEL: 'fallback',
       OPENROUTER_API_KEY: 'or-key',
     });
 
@@ -325,7 +242,6 @@ describe('the receipt provider chain', () => {
     const { readReceipt } = await loadChain({
       GEMINI_API_KEY: 'test-key',
       GEMINI_MODEL: 'primary',
-      GEMINI_FALLBACK_MODEL: 'fallback',
       OPENROUTER_API_KEY: 'or-key',
     });
 
@@ -344,7 +260,6 @@ describe('the receipt provider chain', () => {
     const { readReceipt } = await loadChain({
       GEMINI_API_KEY: 'test-key',
       GEMINI_MODEL: 'primary',
-      GEMINI_FALLBACK_MODEL: 'fallback',
       OPENROUTER_API_KEY: undefined,
     });
 
