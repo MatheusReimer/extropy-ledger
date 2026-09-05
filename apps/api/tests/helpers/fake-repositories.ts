@@ -100,14 +100,11 @@ export function fakeRepositories(seed: Seed = {}): FakeRepositories {
         return state.expenses.filter((e) => inRange(e, from, to) && e.baseCents === null).length;
       },
       async totalsByCategory(from, to) {
-        const totals = new Map<
-          string,
-          { categoryId: ObjectId; totalCents: number; count: number }
-        >();
+        const totals = new Map<string, { categoryId: string; totalCents: number; count: number }>();
         for (const e of state.expenses) {
           if (!inRange(e, from, to) || e.baseCents === null) continue;
           const key = e.categoryId.toHexString();
-          const row = totals.get(key) ?? { categoryId: e.categoryId, totalCents: 0, count: 0 };
+          const row = totals.get(key) ?? { categoryId: key, totalCents: 0, count: 0 };
           row.totalCents += e.baseCents;
           row.count += 1;
           totals.set(key, row);

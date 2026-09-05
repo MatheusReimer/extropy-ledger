@@ -9,7 +9,7 @@ export type ExpenseListFilter = {
 };
 
 export type CategoryTotalRow = {
-  readonly categoryId: ObjectId;
+  readonly categoryId: string;
   readonly totalCents: number;
   readonly count: number;
 };

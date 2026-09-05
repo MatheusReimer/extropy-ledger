@@ -1,10 +1,5 @@
 import type { CategoryBreakdown, MonthlySummary } from '@expense/shared';
-
-export type CategoryTotal = {
-  categoryId: string;
-  totalCents: number;
-  count: number;
-};
+import type { CategoryTotalRow } from '../db/repositories/types.js';
 
 export function monthRange(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: `${month}-31` };
@@ -12,7 +7,7 @@ export function monthRange(month: string): { from: string; to: string } {
 
 export function buildSummary(
   month: string,
-  totals: readonly CategoryTotal[],
+  totals: readonly CategoryTotalRow[],
   categoryNames: ReadonlyMap<string, string>,
   unconvertedCount = 0,
 ): MonthlySummary {

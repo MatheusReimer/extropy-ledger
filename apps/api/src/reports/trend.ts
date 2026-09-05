@@ -1,6 +1,5 @@
 import type { MonthlyTrendPoint } from '@expense/shared';
-
-export type MonthTotal = { month: string; totalCents: number; count: number };
+import type { MonthTotalRow } from '../db/repositories/types.js';
 
 export function monthsEndingAt(to: string, count: number): string[] {
   const [year, month] = to.split('-').map(Number);
@@ -16,7 +15,7 @@ export function monthsEndingAt(to: string, count: number): string[] {
 
 export function buildTrend(
   months: readonly string[],
-  totals: readonly MonthTotal[],
+  totals: readonly MonthTotalRow[],
 ): MonthlyTrendPoint[] {
   const byMonth = new Map(totals.map((total) => [total.month, total]));
   return months.map((month) => ({

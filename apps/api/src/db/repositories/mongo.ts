@@ -76,7 +76,7 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
         ])
         .toArray();
       return rows.map((row) => ({
-        categoryId: row._id,
+        categoryId: row._id.toHexString(),
         totalCents: row.totalCents,
         count: row.count,
       }));
