@@ -1,40 +1,27 @@
 import { ObjectId, type Filter } from 'mongodb';
 import { getCollections } from '../client.js';
-import type { ExpenseDoc } from '../types.js';
+import type { CategoryDoc, ExpenseDoc, UserDoc } from '../types.js';
 import { toObjectId } from '../../lib/ids.js';
 import type {
+  AccountRepository,
   BudgetRepository,
   CategoryRepository,
   CategoryTotalRow,
   ExpenseListFilter,
   ExpenseRepository,
   MonthTotalRow,
+  RateRepository,
   ReceiptRepository,
   Repositories,
   UserRepository,
 } from './types.js';
 
-/**
- * The MongoDB implementation of the persistence surface.
- *
- * Every method below closes over one `userId` and puts it in the FILTER of every
- * query - which is the single place that rule now lives. `repositoriesFor` is
- * called by the auth middleware and nowhere else, so the id being scoped to is
- * always the authenticated one.
- *
- * The one deliberate exception is signup and login: those run BEFORE there is an
- * authenticated user, so `routes/auth.ts` still reaches for the collections
- * directly. A repository bound to a user is exactly the wrong shape for creating
- * that user.
- */
 export async function repositoriesFor(userIdHex: string): Promise<Repositories> {
   const collections = await getCollections();
   const userId = toObjectId(userIdHex);
 
   const expenses: ExpenseRepository = {
     async list(filter: ExpenseListFilter) {
-      // `date` is `YYYY-MM-DD`, so the range is a string comparison - and it uses
-      // the { userId, date } index directly, with no conversion.
       const dateFilter = {
         ...(filter.from ? { $gte: filter.from } : {}),
         ...(filter.to ? { $lte: filter.to } : {}),
@@ -66,10 +53,9 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
 
     remove: (id) => collections.expenses.findOneAndDelete({ _id: id, userId }),
 
-    countInRange: (from, to) =>
-      // Only the rows that have NO base value: an expense whose rate could not
-      // be fetched is reported separately rather than added at face value, which
-      // would silently mix currencies into one number.
+    countByCategory: (categoryId) => collections.expenses.countDocuments({ userId, categoryId }),
+
+    countUnconverted: (from, to) =>
       collections.expenses.countDocuments({
         userId,
         date: { $gte: from, $lte: to },
@@ -101,9 +87,6 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
         .aggregate<{ _id: string; totalCents: number; count: number }>([
           { $match: { userId, date: { $gte: from, $lte: to }, baseCents: { $ne: null } } },
           {
-            // `date` is `YYYY-MM-DD`, so the month is the first seven characters -
-            // no date parsing, no timezone, and the match still uses the
-            // { userId, date } index.
             $group: {
               _id: { $substrBytes: ['$date', 0, 7] },
               totalCents: { $sum: '$baseCents' },
@@ -119,6 +102,8 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
   const categories: CategoryRepository = {
     list: () => collections.categories.find({ userId }).sort({ name: 1 }).toArray(),
 
+    findById: (id) => collections.categories.findOne({ _id: id, userId }),
+
     async insert(doc) {
       await collections.categories.insertOne(doc);
     },
@@ -129,6 +114,18 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
         { projection: { _id: 1 } },
       );
       return found !== null;
+    },
+
+    rename: (id, name, nameKey) =>
+      collections.categories.findOneAndUpdate(
+        { _id: id, userId },
+        { $set: { name, nameKey } },
+        { returnDocument: 'after' },
+      ),
+
+    async remove(id) {
+      const result = await collections.categories.deleteOne({ _id: id, userId });
+      return result.deletedCount > 0;
     },
   };
 
@@ -174,6 +171,15 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
     },
   };
 
+  const rates: RateRepository = {
+    find: (key) => collections.rates.findOne({ _id: key }),
+
+    async save(doc) {
+      const { _id, ...fields } = doc;
+      await collections.rates.updateOne({ _id }, { $set: fields }, { upsert: true });
+    },
+  };
+
   const user: UserRepository = {
     find: () => collections.users.findOne({ _id: userId }),
 
@@ -185,5 +191,18 @@ export async function repositoriesFor(userIdHex: string): Promise<Repositories> 
       ),
   };
 
-  return { expenses, categories, budgets, receipts, user };
+  return { expenses, categories, budgets, receipts, user, rates };
+}
+
+export async function accountRepository(): Promise<AccountRepository> {
+  const collections = await getCollections();
+
+  return {
+    findByEmail: (email) => collections.users.findOne({ email }),
+
+    async create(user: UserDoc, categories: readonly CategoryDoc[]) {
+      await collections.users.insertOne(user);
+      if (categories.length > 0) await collections.categories.insertMany([...categories]);
+    },
+  };
 }

@@ -10,16 +10,6 @@ type Props<T extends string> = {
   name: string;
 };
 
-/**
- * A pill-track control built on real radio inputs.
- *
- * It could have been a row of buttons with click handlers, and it would have
- * been unreachable by keyboard and silent to a screen reader. Radios give arrow
- * key navigation, a spoken group name and correct selected-state semantics for
- * free; the visible pill is a styled `<label>` and the input itself is
- * visually hidden rather than `display: none`, which would take it out of the
- * tab order entirely.
- */
 export function Segmented<T extends string>({ options, value, onChange, label, name }: Props<T>) {
   return (
     <HStack
@@ -51,7 +41,6 @@ export function Segmented<T extends string>({ options, value, onChange, label, n
             bg={active ? 'bg.panel' : 'transparent'}
             boxShadow={active ? '0 1px 2px rgba(34,28,22,0.10)' : 'none'}
             color={active ? 'fg' : 'fg.muted'}
-            // Hovering brightens an inactive segment; the active one is already there.
             _hover={{ color: 'fg' }}
             _focusWithin={{ outline: '2px solid', outlineColor: 'accent', outlineOffset: '1px' }}
           >
@@ -61,8 +50,6 @@ export function Segmented<T extends string>({ options, value, onChange, label, n
               value={option.value}
               checked={active}
               onChange={() => onChange(option.value)}
-              // Visually hidden, not removed: `display: none` would drop it out
-              // of the tab order and break arrow-key navigation.
               style={{
                 position: 'absolute',
                 width: 1,

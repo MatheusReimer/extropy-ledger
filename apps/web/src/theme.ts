@@ -1,37 +1,5 @@
 import { createSystem, defaultConfig, defineConfig, defineRecipe } from '@chakra-ui/react';
 
-/**
- * Bone paper, espresso ink, one burnt-orange accent.
- *
- * Almost every dashboard ships dark with a violet accent, which is precisely why
- * this one does not: in a stack of submissions, the light one is the one that is
- * remembered. It also screenshots and prints far better, which matters when the
- * deliverable is reviewed rather than used.
- *
- * Five decisions carry it:
- *
- * 1. **Paper, not white.** #F7F4EE is warm enough to read as stock rather than a
- *    blank canvas, and it lets a genuinely white card sit above it.
- * 2. **Espresso, not black.** #221C16 at full strength is softer than #000 and
- *    keeps the whole page in one temperature family.
- * 3. **Grain over the whole canvas.** A single SVG turbulence filter, inlined as
- *    a data URI - no image request, resolution independent. It is what stops a
- *    large light area looking flat and digital.
- * 4. **The accent is reserved.** Burnt orange appears on exactly one control at a
- *    time. An accent used everywhere is decoration; used once per view it is a
- *    signpost.
- * 5. **Direction is not the accent.** Spending more is flagged brick, spending
- *    less olive - never the accent colour, which would make "primary action" and
- *    "you overspent" the same visual idea.
- */
-
-/**
- * Fractal noise, inlined.
- *
- * `baseFrequency` this high produces fine grain rather than clouds; the low
- * opacity keeps it felt rather than seen. Rendered once by the browser and tiled
- * by `background-repeat`, so it costs no network request and no layout work.
- */
 const GRAIN =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E\")";
 
@@ -48,8 +16,6 @@ const button = defineRecipe({
       outlineColor: 'accent',
       outlineOffset: '2px',
     },
-    // A button that moves 1px on press feels connected to the click. Anything
-    // more reads as a toy.
     _active: { transform: 'translateY(1px)' },
     _disabled: { transform: 'none' },
   },
@@ -58,9 +24,6 @@ const button = defineRecipe({
       solid: {
         bg: 'accent.solid',
         color: 'accent.fg',
-        // A hairline of light along the top edge. It is the difference between a
-        // flat rectangle of colour and something that looks pressed out of a
-        // material - and it is one line of CSS.
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(34,28,22,0.16)',
         _hover: { bg: 'accent.emphasized' },
         _active: { bg: 'accent.emphasized', transform: 'translateY(1px)' },
@@ -92,8 +55,6 @@ const config = defineConfig({
     'html, body': {
       bg: 'bg',
       color: 'fg',
-      // Tabular figures everywhere. In a column of money, proportional digits
-      // make the decimal points wander and the eye cannot scan down them.
       fontVariantNumeric: 'tabular-nums',
     },
     body: {
@@ -101,14 +62,6 @@ const config = defineConfig({
       backgroundAttachment: 'fixed, fixed',
     },
     '::selection': { bg: 'accent.subtle' },
-    /**
-     * Motion is an enhancement, never the mechanism.
-     *
-     * Everything animated here is also correct with the animation removed, so
-     * switching it all off cannot leave an element invisible or a state
-     * unreachable. A comma-separated selector is rejected by Chakra's globalCss
-     * types, so this is the single universal selector instead.
-     */
     '*': {
       '@media (prefers-reduced-motion: reduce)': {
         animationDuration: '0.01ms !important',
@@ -120,7 +73,6 @@ const config = defineConfig({
   },
   theme: {
     keyframes: {
-      /** The scan sweep and its leading edge, travelling the height of the thumbnail. */
       scan: {
         '0%': { transform: 'translateY(-100%)' },
         '100%': { transform: 'translateY(230%)' },
@@ -131,13 +83,6 @@ const config = defineConfig({
         '88%': { opacity: '0.55' },
         '100%': { transform: 'translateY(96px)', opacity: '0' },
       },
-      /**
-       * A ring leaving the corner of the rail and fading as it widens.
-       *
-       * Opacity peaks early and is gone well before the ring reaches the far
-       * edge - a ripple that faded exactly at the boundary would read as being
-       * clipped by the panel rather than as spending itself.
-       */
       sidebarRipple: {
         '0%': { transform: 'scale(0.18)', opacity: '0' },
         '12%': { opacity: '0.5' },
@@ -148,7 +93,6 @@ const config = defineConfig({
         '0%, 100%': { opacity: '1', transform: 'scale(1)' },
         '50%': { opacity: '0.4', transform: 'scale(0.8)' },
       },
-      /** A filled field pulses once, so the eye is told where the value landed. */
       landed: {
         '0%': { backgroundColor: 'rgba(180,85,31,0.18)' },
         '100%': { backgroundColor: 'transparent' },
@@ -228,14 +172,8 @@ const config = defineConfig({
           fg: { value: '{colors.bone.50}' },
           muted: { value: 'rgba(180, 85, 31, 0.16)' },
           subtle: { value: 'rgba(180, 85, 31, 0.08)' },
-          /** Chart marks, judged against the paper rather than against type. */
           data: { value: '{colors.ember.500}' },
         },
-        /**
-         * Spending more is not a gain. Investment dashboards colour "up" green;
-         * on a ledger a rising total is the one worth flagging, so up reads brick
-         * and down reads olive - and neither borrows the accent.
-         */
         trend: {
           up: { value: '{colors.signal.up}' },
           down: { value: '{colors.signal.down}' },

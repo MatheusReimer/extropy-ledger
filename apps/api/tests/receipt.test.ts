@@ -81,7 +81,7 @@ describe('parseExtractedExpense', () => {
     amount: '240.45',
     currency: 'brl',
     date: '2026-08-14',
-    category: 'Groceries',
+    category: 'Food',
     confidence: 0.95,
   };
 
@@ -92,7 +92,7 @@ describe('parseExtractedExpense', () => {
       amountCents: 24_045,
       currency: 'BRL',
       date: '2026-08-14',
-      category: 'Groceries',
+      category: 'Food',
       confidence: 0.95,
     });
   });
@@ -117,20 +117,28 @@ describe('parseExtractedExpense', () => {
   });
 
   it('drops an amount it cannot parse rather than guessing', () => {
-    expect(parseExtractedExpense({ ...complete, amount: 'R$ 240,45 total' }, CATEGORIES)?.amountCents).toBeNull();
+    expect(
+      parseExtractedExpense({ ...complete, amount: 'R$ 240,45 total' }, CATEGORIES)?.amountCents,
+    ).toBeNull();
   });
 
   it('accepts a comma decimal separator, as printed on a Brazilian receipt', () => {
-    expect(parseExtractedExpense({ ...complete, amount: '240,45' }, CATEGORIES)?.amountCents).toBe(24_045);
+    expect(parseExtractedExpense({ ...complete, amount: '240,45' }, CATEGORIES)?.amountCents).toBe(
+      24_045,
+    );
   });
 
   it('refuses a category the user does not have', () => {
-    expect(parseExtractedExpense({ ...complete, category: 'Crypto' }, CATEGORIES)?.category).toBeNull();
+    expect(
+      parseExtractedExpense({ ...complete, category: 'Crypto' }, CATEGORIES)?.category,
+    ).toBeNull();
   });
 
   it('clamps a confidence outside 0..1', () => {
     expect(parseExtractedExpense({ ...complete, confidence: 4 }, CATEGORIES)?.confidence).toBe(1);
-    expect(parseExtractedExpense({ ...complete, confidence: 'high' }, CATEGORIES)?.confidence).toBe(0);
+    expect(parseExtractedExpense({ ...complete, confidence: 'high' }, CATEGORIES)?.confidence).toBe(
+      0,
+    );
   });
 
   it('gives up entirely when there is neither an amount nor a merchant', () => {
@@ -152,11 +160,27 @@ describe('parseExtractedExpense', () => {
 describe('parseExtractedExpense amount typing', () => {
   it('accepts the amount as a number as well as a string', () => {
     const asString = parseExtractedExpense(
-      { merchant: 'X', description: 'y', amount: '123.76', currency: 'USD', date: '2026-08-14', category: 'Dining', confidence: 0.9 },
+      {
+        merchant: 'X',
+        description: 'y',
+        amount: '123.76',
+        currency: 'USD',
+        date: '2026-08-14',
+        category: 'Dining',
+        confidence: 0.9,
+      },
       CATEGORIES,
     );
     const asNumber = parseExtractedExpense(
-      { merchant: 'X', description: 'y', amount: 123.76, currency: 'USD', date: '2026-08-14', category: 'Dining', confidence: 0.9 },
+      {
+        merchant: 'X',
+        description: 'y',
+        amount: 123.76,
+        currency: 'USD',
+        date: '2026-08-14',
+        category: 'Dining',
+        confidence: 0.9,
+      },
       CATEGORIES,
     );
     expect(asString?.amountCents).toBe(12_376);
@@ -166,7 +190,15 @@ describe('parseExtractedExpense amount typing', () => {
   it('still refuses a number that is not a usable amount', () => {
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -12.5]) {
       const result = parseExtractedExpense(
-        { merchant: 'X', description: 'y', amount: bad, currency: 'USD', date: '2026-08-14', category: 'Dining', confidence: 0.9 },
+        {
+          merchant: 'X',
+          description: 'y',
+          amount: bad,
+          currency: 'USD',
+          date: '2026-08-14',
+          category: 'Dining',
+          confidence: 0.9,
+        },
         CATEGORIES,
       );
       expect(result?.amountCents ?? null).toBeNull();
@@ -186,7 +218,7 @@ describe('extractExpense', () => {
         amountCents: 24_045,
         currency: 'BRL',
         date: '2026-08-14',
-        category: 'Groceries',
+        category: 'Food',
         confidence: 0.9,
       },
     });

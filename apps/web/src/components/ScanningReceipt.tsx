@@ -2,14 +2,6 @@ import { Box, HStack, Image, Stack, Text } from '@chakra-ui/react';
 import { useEffect, useState } from 'react';
 import { useT, type TranslationKey } from '../i18n';
 
-/**
- * The stages narrated while the model reads.
- *
- * These are honest about ORDER but not about progress - the API returns one
- * answer, so nothing here knows how far along it is. They advance on a timer and
- * hold on the last one rather than pretending to complete, because a progress
- * bar that reaches 100% and then waits is worse than no progress bar.
- */
 const STAGE_KEYS = [
   'receipt.stageReading',
   'receipt.stageMerchant',
@@ -19,21 +11,11 @@ const STAGE_KEYS = [
 
 const STAGE_MS = 1400;
 
-/**
- * A scan line sweeping the actual uploaded image.
- *
- * A spinner would say "something is happening"; this says WHAT is happening, to
- * WHICH document, and it uses the file the user just chose rather than a
- * placeholder. The wait is the same length either way - the difference is
- * whether it feels like the app is working or hanging.
- */
 export function ScanningReceipt({ src, isImage }: { src: string; isImage: boolean }) {
   const t = useT();
   const [stage, setStage] = useState(0);
 
   useEffect(() => {
-    // Holds on the final stage instead of looping: a cycling list would suggest
-    // the work restarted.
     const timer = setInterval(
       () => setStage((current) => Math.min(current + 1, STAGE_KEYS.length - 1)),
       STAGE_MS,
@@ -60,7 +42,6 @@ export function ScanningReceipt({ src, isImage }: { src: string; isImage: boolea
           <Box position="absolute" inset="0" bg="bg.subtle" />
         )}
 
-        {/* The sweep itself: a soft band travelling top to bottom, forever. */}
         <Box
           position="absolute"
           insetX="0"
@@ -74,7 +55,6 @@ export function ScanningReceipt({ src, isImage }: { src: string; isImage: boolea
           animationTimingFunction="cubic-bezier(0.4, 0, 0.6, 1)"
           animationIterationCount="infinite"
         />
-        {/* A bright hairline at the leading edge, so the sweep reads as a scan. */}
         <Box
           position="absolute"
           insetX="0"

@@ -1,20 +1,5 @@
 import { Type, type Schema } from '@google/genai';
 
-/**
- * The extraction contract - a wider cousin of the categorisation schema.
- *
- * Every string field allows "" rather than being optional, because a model given
- * an optional field will sometimes omit it and sometimes invent it. Forcing a
- * value and defining the empty string as "not found" makes "I could not read
- * this" a first-class answer instead of a missing key.
- */
-/**
- * What each field means, written once and handed to both vendors' schemas.
- *
- * These descriptions do real work - the `amount` one in particular is what
- * separates the total from the subtotal directly above it - so they must not
- * exist in two slightly different versions.
- */
 const FIELD_DESCRIPTIONS = {
   merchant: 'Who was paid, as printed. Empty string if not stated.',
   description:
@@ -52,12 +37,6 @@ export function geminiReceiptSchema(categories: readonly string[]): Schema {
         type: Type.STRING,
         description: FIELD_DESCRIPTIONS.date,
       },
-      /**
-       * No empty option here: Gemini rejects an empty string inside an enum
-       * ("enum[0]: cannot be empty"). It needs none - every account has an
-       * "Other" category, which is already this domain's word for "nothing
-       * fits", so the vocabulary carries the meaning instead of a sentinel.
-       */
       category: {
         type: Type.STRING,
         enum: [...categories],
@@ -81,13 +60,6 @@ export function geminiReceiptSchema(categories: readonly string[]): Schema {
   };
 }
 
-/**
- * The amount instruction carries the weight here.
- *
- * A receipt is full of numbers that are not the answer: line items, subtotals,
- * tax lines, "amount tendered", change given. Naming the target precisely is
- * what separates 240.45 from the 229.00 subtotal directly above it on the page.
- */
 export function buildReceiptSystemPrompt(categories: readonly string[]): string {
   return [
     'You read a receipt or invoice image and extract a single expense from it.',
@@ -101,16 +73,6 @@ export function buildReceiptSystemPrompt(categories: readonly string[]): string 
   ].join('\n');
 }
 
-/**
- * The same shape as `geminiReceiptSchema`, in plain JSON Schema.
- *
- * Two schemas rather than one because the two vendors want different objects:
- * Gemini takes its own `Schema` with `Type.OBJECT` enums and `propertyOrdering`,
- * while every OpenAI-compatible endpoint wants draft JSON Schema with
- * `additionalProperties: false`. The FIELDS are shared below so the two cannot
- * drift - a field added to one is added to both, which is the failure this
- * arrangement is guarding against.
- */
 export function jsonReceiptSchema(categories: readonly string[]): Record<string, unknown> {
   return {
     type: 'object',

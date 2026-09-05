@@ -9,14 +9,6 @@ import type { AuthedHandler } from '../http/types.js';
 import { parseInput } from '../http/validate.js';
 import { toObjectId } from '../lib/ids.js';
 
-/**
- * The suggestion is scoped to THIS user's categories, custom ones included.
- *
- * Passing the fixed predefined list would be simpler and wrong: someone who
- * created "Pets" would never be offered "Pets". Because that list becomes the
- * `enum` in the tool schema, the model is also blocked from suggesting something
- * that does not exist in the account that asked.
- */
 export const categorizeExpense: AuthedHandler = async (request) => {
   const input = parseInput(categorizeRequestSchema, request.body);
 
@@ -27,30 +19,17 @@ export const categorizeExpense: AuthedHandler = async (request) => {
   return { status: 200, body: result };
 };
 
-/**
- * Reading a document is slower than classifying a string, and gets its own budget.
- *
- * The categorisation chain runs on a blur event where anything past eight
- * seconds is worse than useless. An upload is a deliberate act with a visible
- * progress state, so a person will happily wait longer - but not forever, and
- * not past the Lambda's own timeout.
- */
 const EXTRACT_BUDGET_MS = 25_000;
 
 export const extractExpenseFromReceipt: AuthedHandler = async (request) => {
   const input = parseInput(extractReceiptSchema, request.body);
 
-  // Decode and sniff BEFORE anything else touches the bytes. The client's
-  // declared mimeType is not consulted again past this line.
   const decoded = decodeUpload(input.data);
   if (!decoded.ok) throw unprocessable({ file: decoded.reason });
 
   const userId = toObjectId(request.userId);
   const docs = await request.repos.categories.list();
 
-  // Stored before the model is asked, so the id exists regardless of how the
-  // read goes. An upload nobody saves is swept by the TTL index rather than
-  // needing a rollback path here.
   const receiptId = await storeReceipt(
     request.repos,
     userId,
@@ -67,17 +46,6 @@ export const extractExpenseFromReceipt: AuthedHandler = async (request) => {
     },
   );
 
-  /**
-   * Two failures, two answers, because they ask different things of the user.
-   *
-   * 503 means the reader never got back to us - the document is probably fine
-   * and trying again is the right move, so the client offers exactly that. 422
-   * means the model looked and found no expense, which retrying cannot fix.
-   *
-   * These used to share one message, and it told people to take a clearer photo
-   * when the actual problem was a busy free tier. The receipt is stored either
-   * way, so a retry re-reads a file already on the server.
-   */
   if (outcome.status === 'unavailable') {
     throw new HttpError(
       503,

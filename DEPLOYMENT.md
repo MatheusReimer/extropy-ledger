@@ -44,19 +44,19 @@ orphaned resources, nothing billable left behind.
 
 ### Why we are confident it is not a misconfiguration
 
-`HandlerErrorCode: AccessDenied` is CloudFormation's bucket for *any* 403, so the message alone
+`HandlerErrorCode: AccessDenied` is CloudFormation's bucket for _any_ 403, so the message alone
 does not distinguish "your credentials are wrong" from "your account is held". Four checks
 separate them, and all four point the same way:
 
-| Check | Result |
-| --- | --- |
-| Policy on the deploy user | `AdministratorAccess` |
-| `iam simulate-principal-policy` for `cloudfront:CreateDistribution` | **allowed** |
-| CloudFront API reachable | yes — `list-distributions` returns a count, not an error |
-| **Created a CloudFront OAC directly with the same credentials** | **succeeded**, then deleted |
+| Check                                                               | Result                                                   |
+| ------------------------------------------------------------------- | -------------------------------------------------------- |
+| Policy on the deploy user                                           | `AdministratorAccess`                                    |
+| `iam simulate-principal-policy` for `cloudfront:CreateDistribution` | **allowed**                                              |
+| CloudFront API reachable                                            | yes — `list-distributions` returns a count, not an error |
+| **Created a CloudFront OAC directly with the same credentials**     | **succeeded**, then deleted                              |
 
 That last one is the decisive one: the credentials can create CloudFront resources. Only
-*distributions* are refused.
+_distributions_ are refused.
 
 The ordering says the same thing. A credentials or configuration mistake fails on the **first**
 resource. This deploy created an S3 bucket, three IAM roles, a Lambda, a log group, an HTTP API
@@ -89,14 +89,14 @@ Attempted twice so far; the second attempt returned the identical error with Req
 
 ## What is already done
 
-| | |
-| --- | --- |
-| Code committed and pushed | `github.com/MatheusReimer/extropy-ledger` |
-| AWS account | created |
-| IAM user `cdk-deploy` | created, `AdministratorAccess`, access keys in `aws configure` |
-| Region | `us-east-1`, aligned across the CLI profile and `CDK_DEFAULT_REGION` |
-| `cdk bootstrap` | **done** — `aws://479100079919/us-east-1`, survives the rollback |
-| `.env` | complete and verified against the live database |
+|                           |                                                                      |
+| ------------------------- | -------------------------------------------------------------------- |
+| Code committed and pushed | `github.com/MatheusReimer/extropy-ledger`                            |
+| AWS account               | created                                                              |
+| IAM user `cdk-deploy`     | created, `AdministratorAccess`, access keys in `aws configure`       |
+| Region                    | `us-east-1`, aligned across the CLI profile and `CDK_DEFAULT_REGION` |
+| `cdk bootstrap`           | **done** — `aws://479100079919/us-east-1`, survives the rollback     |
+| `.env`                    | complete and verified against the live database                      |
 
 Bootstrap does not need repeating.
 
@@ -148,7 +148,7 @@ r.resolveTxt('<cluster>.mongodb.net').then(t=>console.log(t.flat().join('')));"
 ## Before the retry
 
 - [ ] **Rotate the Atlas password.** Atlas → Database Access → edit the user → Edit Password →
-      Autogenerate, then update `MONGODB_URI` in `.env`. Do it *before* deploying: `pnpm deploy`
+      Autogenerate, then update `MONGODB_URI` in `.env`. Do it _before_ deploying: `pnpm deploy`
       copies `MONGODB_URI` into the Lambda's environment, so rotating afterwards means deploying
       twice.
 - [ ] **Atlas → Network Access → IP Access List → `0.0.0.0/0`.** A Lambda has no fixed egress IP.
@@ -180,7 +180,7 @@ ExpenseTrackerStack.ApiGatewayUrl  https://<id>.execute-api.us-east-1.amazonaws.
 There is a fallback — serve the site straight from S3 and call API Gateway directly — but it is
 a real downgrade and should be a last resort:
 
-- **S3 website endpoints are HTTP only.** HTTPS in front of S3 *is* CloudFront. Serving a login
+- **S3 website endpoints are HTTP only.** HTTPS in front of S3 _is_ CloudFront. Serving a login
   form over plain HTTP is the wrong trade on an application that holds a bearer token.
 - It splits the app across two origins, which means real CORS instead of the single-host design
   the README explains — and `CORS_ORIGINS` exists for exactly that case, but it is more moving

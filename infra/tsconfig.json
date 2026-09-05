@@ -10,5 +10,5 @@
     // where it actually catches bugs in our own code.
     "exactOptionalPropertyTypes": false
   },
-  "include": ["bin", "lib"]
+  "include": ["bin", "lib", "tests"]
 }

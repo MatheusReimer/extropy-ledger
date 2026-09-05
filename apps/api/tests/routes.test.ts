@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ObjectId } from 'mongodb';
 import { listBudgets, setBudget, deleteBudget } from '../src/routes/budgets.js';
-import { createCategory, listCategories } from '../src/routes/categories.js';
+import {
+  createCategory,
+  deleteCategory,
+  listCategories,
+  renameCategory,
+} from '../src/routes/categories.js';
 import { deleteExpense, listExpenses, updateExpense } from '../src/routes/expenses.js';
 import { HttpError } from '../src/http/errors.js';
 import type { AuthedRequest } from '../src/http/types.js';
@@ -128,9 +133,7 @@ describe('expense routes', () => {
     const doc = expense({ receiptId });
     await repos.expenses.insert(doc);
 
-    const response = await deleteExpense(
-      authed(repos, { params: { id: doc._id.toHexString() } }),
-    );
+    const response = await deleteExpense(authed(repos, { params: { id: doc._id.toHexString() } }));
 
     expect(response.status).toBe(204);
     expect(repos.state.expenses).toHaveLength(0);
@@ -153,16 +156,16 @@ describe('expense routes', () => {
 
 describe('budget routes', () => {
   let repos: FakeRepositories;
-  const groceries = category('Groceries');
+  const food = category('Food');
 
   beforeEach(() => {
-    repos = fakeRepositories({ categories: [groceries] });
+    repos = fakeRepositories({ categories: [food] });
   });
 
   it('sets a budget and returns it', async () => {
     const response = await setBudget(
       authed(repos, {
-        params: { categoryId: groceries._id.toHexString() },
+        params: { categoryId: food._id.toHexString() },
         body: { limitCents: 30_000 },
       }),
     );
@@ -173,7 +176,7 @@ describe('budget routes', () => {
 
   /** Twice is once: the upsert is what makes PUT the honest verb here. */
   it('is idempotent - setting twice leaves one budget', async () => {
-    const params = { categoryId: groceries._id.toHexString() };
+    const params = { categoryId: food._id.toHexString() };
     await setBudget(authed(repos, { params, body: { limitCents: 30_000 } }));
     await setBudget(authed(repos, { params, body: { limitCents: 25_000 } }));
 
@@ -193,7 +196,7 @@ describe('budget routes', () => {
   });
 
   it('deleting a budget twice is a 404 the second time', async () => {
-    const params = { categoryId: groceries._id.toHexString() };
+    const params = { categoryId: food._id.toHexString() };
     await setBudget(authed(repos, { params, body: { limitCents: 5_000 } }));
 
     expect((await deleteBudget(authed(repos, { params }))).status).toBe(204);
@@ -206,7 +209,7 @@ describe('budget routes', () => {
 
     await setBudget(
       authed(repos, {
-        params: { categoryId: groceries._id.toHexString() },
+        params: { categoryId: food._id.toHexString() },
         body: { limitCents: 1_000 },
       }),
     );
@@ -226,16 +229,112 @@ describe('category routes', () => {
     expect(repos.state.categories[0]?.nameKey).toBe('pets');
   });
 
+  it('renames a category, keeping the lookup key in step', async () => {
+    const pets = category('Pets');
+    const repos = fakeRepositories({ categories: [pets] });
+
+    const response = await renameCategory(
+      authed(repos, { params: { id: pets._id.toHexString() }, body: { name: '  Pet care  ' } }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ name: 'Pet care' });
+    expect(repos.state.categories[0]?.nameKey).toBe('pet care');
+  });
+
+  it('refuses a rename that collides with another category', async () => {
+    const pets = category('Pets');
+    const repos = fakeRepositories({ categories: [pets, category('Travel')] });
+
+    await expect(
+      renameCategory(
+        authed(repos, { params: { id: pets._id.toHexString() }, body: { name: 'travel' } }),
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('lets a category be renamed to a different casing of its own name', async () => {
+    const pets = category('Pets');
+    const repos = fakeRepositories({ categories: [pets] });
+
+    const response = await renameCategory(
+      authed(repos, { params: { id: pets._id.toHexString() }, body: { name: 'PETS' } }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ name: 'PETS' });
+  });
+
+  it('deletes an unused category and drops its budget with it', async () => {
+    const pets = category('Pets');
+    const repos = fakeRepositories({ categories: [pets] });
+    await repos.budgets.set(pets._id, 5_000);
+
+    const response = await deleteCategory(
+      authed(repos, { params: { id: pets._id.toHexString() } }),
+    );
+
+    expect(response.status).toBe(204);
+    expect(repos.state.categories).toHaveLength(0);
+    expect(repos.state.budgets).toHaveLength(0);
+  });
+
+  /**
+   * Deleting a category in use would either orphan the expenses pointing at it
+   * or silently rewrite them. Refusing is the only answer that loses no data,
+   * and the count is in the message because "it is in use" is not actionable.
+   */
+  it('refuses to delete a category that still has expenses, and says how many', async () => {
+    const pets = category('Pets');
+    const repos = fakeRepositories({ categories: [pets] });
+    await repos.expenses.insert(expense({ categoryId: pets._id }));
+    await repos.expenses.insert(expense({ categoryId: pets._id }));
+
+    await expect(
+      deleteCategory(authed(repos, { params: { id: pets._id.toHexString() } })),
+    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('2 expenses') });
+
+    expect(repos.state.categories).toHaveLength(1);
+  });
+
+  /**
+   * `Other` is not just another row: it is the fallback the categoriser reaches
+   * for when no rule and no model answer fits, and the value the receipt prompt
+   * names for "nothing matches". Losing it would break those paths quietly, so
+   * the API keeps it out of reach rather than trusting the UI to hide it.
+   */
+  it('protects the Other fallback from both rename and delete', async () => {
+    const other = category('Other');
+    const repos = fakeRepositories({ categories: [other] });
+    const params = { id: other._id.toHexString() };
+
+    await expect(
+      renameCategory(authed(repos, { params, body: { name: 'Misc' } })),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(deleteCategory(authed(repos, { params }))).rejects.toMatchObject({ status: 403 });
+    expect(repos.state.categories).toHaveLength(1);
+  });
+
+  it('answers 404 for a category the repository will not return', async () => {
+    const repos = fakeRepositories();
+    const params = { id: new ObjectId().toHexString() };
+
+    await expect(
+      renameCategory(authed(repos, { params, body: { name: 'Pets' } })),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(deleteCategory(authed(repos, { params }))).rejects.toMatchObject({ status: 404 });
+  });
+
   it('returns categories sorted by name', async () => {
     const repos = fakeRepositories({
-      categories: [category('Travel'), category('Dining'), category('Groceries')],
+      categories: [category('Travel'), category('Dining'), category('Food')],
     });
 
     const response = await listCategories(authed(repos));
 
     expect((response.body as { name: string }[]).map((c) => c.name)).toEqual([
       'Dining',
-      'Groceries',
+      'Food',
       'Travel',
     ]);
   });
@@ -251,7 +350,8 @@ describe('the fake and the real repository agree on shape', () => {
   it('implements every method the routes rely on', () => {
     const repos = fakeRepositories();
     expect(Object.keys(repos.expenses).sort()).toEqual([
-      'countInRange',
+      'countByCategory',
+      'countUnconverted',
       'findById',
       'insert',
       'list',
@@ -261,6 +361,15 @@ describe('the fake and the real repository agree on shape', () => {
       'update',
     ]);
     expect(Object.keys(repos.budgets).sort()).toEqual(['list', 'remove', 'set']);
-    expect(Object.keys(repos.categories).sort()).toEqual(['exists', 'insert', 'list']);
+    expect(Object.keys(repos.categories).sort()).toEqual([
+      'exists',
+      'findById',
+      'insert',
+      'list',
+      'remove',
+      'rename',
+    ]);
+    expect(Object.keys(repos.rates).sort()).toEqual(['find', 'save']);
+    expect(Object.keys(repos.user).sort()).toEqual(['find', 'updatePreferences']);
   });
 });

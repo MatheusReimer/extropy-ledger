@@ -4,14 +4,6 @@ import type { CategoryBreakdown } from '@expense/shared';
 import { CategoryIcon } from './CategoryIcon';
 import { BudgetRow } from './BudgetRow';
 
-/**
- * A category as a card with a share bar.
- *
- * The chart answers "which is biggest" at a glance; this answers "how much, and
- * what fraction of the month" without making anyone read an axis. The bar is
- * scaled against the LARGEST category rather than the total, because against the
- * total every bar in a well-spread month is a stub and the comparison dies.
- */
 export function CategoryCard({
   breakdown,
   largestCents,

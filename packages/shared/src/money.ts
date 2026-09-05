@@ -1,32 +1,34 @@
-/**
- * Money is stored and transported as an INTEGER NUMBER OF CENTS.
- *
- * Binary floats cannot represent 0.1 exactly, so adding up expenses as decimal
- * `number`s accumulates error — unacceptable in a spending report. Conversion to
- * decimal happens only at the edges: form input and on-screen formatting.
- */
-export const CENTS_PER_UNIT = 100;
+import { BASE_CURRENCY, minorUnitDigits, minorUnitScale } from './currency.js';
 
-/** "12.34" | 12.34 -> 1234. Returns null when the input is not a valid amount. */
-export function parseAmountToCents(input: string | number): number | null {
+/**
+ * Amounts are integers in the currency's own MINOR UNITS - and how many of
+ * those make a unit depends on the currency, which is the whole reason these
+ * take one. USD has 100 cents to the dollar; JPY has 1 yen to the yen.
+ */
+export function parseAmountToMinorUnits(
+  input: string | number,
+  currency: string = BASE_CURRENCY,
+): number | null {
   const raw = typeof input === 'number' ? input.toString() : input.trim().replace(',', '.');
-  if (!/^\d{1,13}(\.\d{1,2})?$/.test(raw)) return null;
+  const digits = minorUnitDigits(currency);
+
+  const pattern = digits === 0 ? /^\d{1,15}$/ : new RegExp(`^\\d{1,13}(\\.\\d{1,${digits}})?$`);
+  if (!pattern.test(raw)) return null;
 
   const [whole = '0', frac = ''] = raw.split('.');
-  const cents = Number(whole) * CENTS_PER_UNIT + Number(frac.padEnd(2, '0'));
-  return Number.isSafeInteger(cents) ? cents : null;
+  const amount = Number(whole) * minorUnitScale(currency) + Number(frac.padEnd(digits, '0') || '0');
+  return Number.isSafeInteger(amount) ? amount : null;
 }
 
-/** 1234 -> "12.34" (no currency symbol). */
-export function centsToDecimalString(cents: number): string {
-  const sign = cents < 0 ? '-' : '';
-  const abs = Math.abs(cents);
-  return `${sign}${Math.trunc(abs / CENTS_PER_UNIT)}.${String(abs % CENTS_PER_UNIT).padStart(2, '0')}`;
-}
+export function minorUnitsToDecimalString(
+  amount: number,
+  currency: string = BASE_CURRENCY,
+): string {
+  const digits = minorUnitDigits(currency);
+  const sign = amount < 0 ? '-' : '';
+  const abs = Math.abs(amount);
+  if (digits === 0) return `${sign}${abs}`;
 
-/** 1234 -> "$12.34". Currency is fixed in the MVP; see "what I'd do next" in the README. */
-export function formatCents(cents: number, locale = 'en-US', currency = 'USD'): string {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(
-    cents / CENTS_PER_UNIT,
-  );
+  const scale = minorUnitScale(currency);
+  return `${sign}${Math.trunc(abs / scale)}.${String(abs % scale).padStart(digits, '0')}`;
 }

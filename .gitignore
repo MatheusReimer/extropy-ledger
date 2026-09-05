@@ -3,7 +3,7 @@ dist/
 build/
 *.tsbuildinfo
 
-# env — nunca commitar segredos (só .env.example)
+# env - never commit secrets (only .env.example)
 .env
 .env.*
 !.env.example
@@ -12,12 +12,12 @@ build/
 cdk.out/
 .cdk.staging/
 
-# editores / OS
+# editors / OS
 .DS_Store
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
 
-# testes
+# tests
 coverage/

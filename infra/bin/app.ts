@@ -7,17 +7,6 @@ import { ExpenseTrackerStack } from '../lib/expense-tracker-stack.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 loadDotenv({ path: path.resolve(here, '../../.env'), quiet: true });
 
-/**
- * Secrets enter as Lambda environment variables, read from the deployer's
- * environment.
- *
- * A conscious trade-off, documented in the README: the values end up in the
- * CloudFormation template (inside cdk.out/, which is gitignored) and visible in
- * the Lambda console to anyone who already has account access. The next step,
- * out of scope for this MVP, is an SSM Parameter Store SecureString read at cold
- * start - Secrets Manager is NOT free tier ($0.40 per secret per month after the
- * 30-day trial).
- */
 const REQUIRED = ['MONGODB_URI', 'JWT_SECRET'] as const;
 const OPTIONAL = [
   'MONGODB_DB',
@@ -34,8 +23,6 @@ const OPTIONAL = [
 
 const missing = REQUIRED.filter((key) => !process.env[key]);
 if (missing.length > 0) {
-  // Failing at synth with the list of what is missing beats discovering it from
-  // a Lambda 500 ten minutes after the deploy finishes.
   console.error(
     `\nDeploy aborted - required variables missing: ${missing.join(', ')}.\n` +
       'Fill in the .env at the repository root (see .env.example), or export them before deploying.\n',

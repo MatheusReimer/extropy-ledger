@@ -31,8 +31,7 @@ vi.mock('@google/genai', async (importOriginal) => {
   };
 });
 
-const apiError = (status: number) =>
-  new ApiError({ message: `boom ${status}`, status });
+const apiError = (status: number) => new ApiError({ message: `boom ${status}`, status });
 
 /**
  * The provider memoises both its config and its client at module scope, so each

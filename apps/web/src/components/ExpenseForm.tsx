@@ -12,10 +12,10 @@ import {
 } from '@chakra-ui/react';
 import {
   CURRENCIES,
-  centsToDecimalString,
+  minorUnitsToDecimalString,
   isCurrency,
   createExpenseSchema,
-  parseAmountToCents,
+  parseAmountToMinorUnits,
   parseOrFieldErrors,
   type CategorizeResult,
   type CategoryDto,
@@ -33,11 +33,8 @@ import { useI18n, useT, type TranslationKey } from '../i18n';
 type Props = {
   categories: CategoryDto[];
   editing?: ExpenseDto | undefined;
-  /** Receives the saved expense, so the page can follow it to its month. */
   onDone?: ((saved?: ExpenseDto) => void) | undefined;
-  /** Single column, for the narrow rail on the overview. */
   compact?: boolean;
-  /** The month on screen, so a saved entry can say when it lands elsewhere. */
   viewingMonth?: string | undefined;
 };
 
@@ -49,12 +46,14 @@ const emptyDraft = (currency: string) => ({
   currency,
 });
 
-/**
- * Mirrors the server's `toDescription`, including its 72-character cap.
- *
- * Both sides compose the same string, so they have to agree on the length too -
- * otherwise the form shows one description and the saved row shows another.
- */
+const draftFrom = (expense: ExpenseDto) => ({
+  description: expense.description,
+  amount: minorUnitsToDecimalString(expense.amountCents, expense.currency),
+  categoryId: expense.categoryId,
+  date: expense.date,
+  currency: expense.currency,
+});
+
 const describeExtraction = (extracted: ExtractedExpense): string =>
   [extracted.merchant, extracted.description].filter(Boolean).join(' - ').slice(0, 72);
 
@@ -67,58 +66,23 @@ const SOURCE_KEY: Record<CategorizeResult['source'], TranslationKey> = {
 export function ExpenseForm({ categories, editing, onDone, compact = false, viewingMonth }: Props) {
   const t = useT();
   const { displayCurrency } = useI18n();
-  /**
-   * A new expense defaults to the currency the user reads in.
-   *
-   * Not to the account's base: someone whose display currency is BRL is almost
-   * certainly spending in BRL, and defaulting to USD would make the common case
-   * a correction on every single entry.
-   */
-  const [draft, setDraft] = useState(() => emptyDraft(displayCurrency));
+  const [draft, setDraft] = useState(() =>
+    editing ? draftFrom(editing) : emptyDraft(displayCurrency),
+  );
 
-  /**
-   * The entry just created, held so the panel can confirm it.
-   *
-   * Only ever set for a CREATE. Editing is a correction made in place - the row
-   * the user is looking at updates in the table behind the form, so a
-   * confirmation would be telling them something they can already see.
-   */
   const [justSaved, setJustSaved] = useState<
     { expense: ExpenseDto; landedIn?: string | undefined } | undefined
   >(undefined);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [suggestion, setSuggestion] = useState<CategorizeResult | undefined>(undefined);
 
-  /**
-   * Remembers the description already classified.
-   *
-   * It is what stops the same call going out twice when the field loses and
-   * regains focus without the text changing - the easiest way to double the
-   * cost of this feature without anyone noticing.
-   */
   const suggestedFor = useRef<string>('');
-  /** A manual pick disables auto-suggestion: the user has already decided. */
-  const categoryTouched = useRef(false);
+  const categoryTouched = useRef(Boolean(editing));
 
-  /**
-   * Which fields an extraction just filled, so each can flash as it lands.
-   *
-   * The app's best trick used to happen invisibly - four values appeared at once
-   * and nothing told you where to look. Flashing them in sequence makes the
-   * extraction legible as an event rather than a repaint, and it doubles as an
-   * honest signal of WHICH fields the document actually yielded.
-   */
   const [landed, setLanded] = useState<readonly string[]>([]);
 
-  /**
-   * The upload this draft came from, if any.
-   *
-   * Held here rather than in the dropzone because it belongs to the DRAFT: it
-   * has to survive until submit, and be dropped if the user starts over.
-   */
   const [receiptId, setReceiptId] = useState<string | undefined>(undefined);
 
-  /** Cleared on a timer, so a second upload re-animates rather than staying lit. */
   useEffect(() => {
     if (landed.length === 0) return;
     const timer = setTimeout(() => setLanded([]), 1400);
@@ -143,62 +107,28 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
   const categorize = useCategorize();
   const active = editing ? update : create;
 
-  useEffect(() => {
-    if (!editing) return;
-    setDraft({
-      description: editing.description,
-      amount: centsToDecimalString(editing.amountCents),
-      categoryId: editing.categoryId,
-      date: editing.date,
-      currency: editing.currency,
-    });
-    categoryTouched.current = true;
-    setSuggestion(undefined);
-  }, [editing]);
-
-  /**
-   * The call fires when the description is FINISHED (blur), not on every keystroke.
-   *
-   * Per keystroke, "Starbucks downtown" would be ~20 calls - visible latency,
-   * rate limits and an API bill for a result that only matters once. On blur it
-   * is one call per expense, and only while no category has been chosen yet: if
-   * one has, there is nothing to suggest.
-   */
   const maybeSuggest = () => {
     const description = draft.description.trim();
     if (categoryTouched.current || description.length < 3) return;
     if (suggestedFor.current === description) return;
 
     suggestedFor.current = description;
-    const amountCents = parseAmountToCents(draft.amount);
+    const amountCents = parseAmountToMinorUnits(draft.amount, draft.currency);
     categorize.mutate(
       { description, ...(amountCents === null ? {} : { amountCents }) },
       {
         onSuccess: (result) => {
           setSuggestion(result);
           const match = categories.find((category) => category.name === result.category);
-          // A fallback preselects nothing: offering "Other" at zero confidence
-          // would be faking an answer the system does not have.
           if (match && result.source !== 'fallback') {
             setDraft((current) => ({ ...current, categoryId: match.id }));
           }
         },
-        // A failed suggestion is silent by design: the form stays perfectly
-        // usable without it.
         onError: () => setSuggestion(undefined),
       },
     );
   };
 
-  /**
-   * A receipt fills the form; it never saves anything.
-   *
-   * Each field is only overwritten when the document actually yielded one, so a
-   * partial read tops up what is there instead of blanking it. And because the
-   * user still has to press the button, a wrong extraction costs a correction
-   * rather than a bad row in their ledger - which is the right trade on a
-   * financial record.
-   */
   const applyExtraction = (extracted: ExtractedExpense) => {
     setReceiptId(extracted.receiptId);
     const matched = extracted.category
@@ -208,23 +138,22 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
     setDraft((current) => ({
       description: describeExtraction(extracted) || current.description,
       amount:
-        extracted.amountCents === null ? current.amount : centsToDecimalString(extracted.amountCents),
+        extracted.amountCents === null
+          ? current.amount
+          : minorUnitsToDecimalString(
+              extracted.amountCents,
+              extracted.currency && isCurrency(extracted.currency)
+                ? extracted.currency
+                : current.currency,
+            ),
       categoryId: matched?.id ?? current.categoryId,
       date: extracted.date ?? current.date,
-      /**
-       * The receipt's own currency, when it printed one we support.
-       *
-       * This is the whole point of reading `currency` off the document: a
-       * Brazilian receipt should arrive as BRL, not as the user's display
-       * currency with a Brazilian number in it. An unsupported code is ignored
-       * rather than guessed at.
-       */
       currency:
-        extracted.currency && isCurrency(extracted.currency) ? extracted.currency : current.currency,
+        extracted.currency && isCurrency(extracted.currency)
+          ? extracted.currency
+          : current.currency,
     }));
 
-    // Only the fields the document actually produced get flashed, in reading
-    // order - a field that stayed empty must not pretend it was filled.
     setLanded(
       [
         describeExtraction(extracted) ? 'description' : '',
@@ -234,8 +163,6 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
       ].filter(Boolean),
     );
 
-    // The description came from a document, so the blur-suggest has nothing left
-    // to add - and a manual category pick from the receipt counts as a choice.
     suggestedFor.current = describeExtraction(extracted);
     if (matched) categoryTouched.current = true;
     setSuggestion(undefined);
@@ -244,7 +171,7 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const amountCents = parseAmountToCents(draft.amount);
+    const amountCents = parseAmountToMinorUnits(draft.amount, draft.currency);
 
     if (amountCents === null) {
       setFieldErrors({ amountCents: t('form.amountInvalid') });
@@ -271,13 +198,6 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
       setSuggestion(undefined);
       suggestedFor.current = '';
       categoryTouched.current = false;
-      /*
-       * Captured HERE, not at render time.
-       *
-       * `onDone` moves the page to the saved expense's month, so by the next
-       * render `viewingMonth` already equals it and the comparison is always
-       * false. The interesting fact is where the user WAS when they saved.
-       */
       const savedMonth = saved.date.slice(0, 7);
       const landedIn =
         viewingMonth && savedMonth !== viewingMonth ? formatMonth(savedMonth) : undefined;
@@ -309,7 +229,6 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
       <Stack gap="4">
         {active.isError ? <ErrorState error={active.error} /> : null}
 
-        {/* Editing an existing row is a correction, not a fresh capture. */}
         {editing ? null : <ReceiptDropzone onExtracted={applyExtraction} />}
 
         <SimpleGrid columns={compact ? 1 : { base: 1, md: 2 }} gap="4">
@@ -325,11 +244,6 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
             <Field.ErrorText>{fieldErrors['description']}</Field.ErrorText>
           </Field.Root>
 
-          {/*
-            Amount and currency are one field, because they are one fact. Putting
-            the currency somewhere else would let a value be entered against the
-            wrong one without anything on screen looking odd.
-          */}
           <Field.Root invalid={Boolean(fieldErrors['amountCents'])}>
             <Field.Label>{t('form.amount')}</Field.Label>
             <HStack gap="2" width="full" {...landing('amount')}>
@@ -393,7 +307,6 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
           </Field.Root>
         </SimpleGrid>
 
-        {/* The UI is honest about provenance: rule, model, or neither. */}
         <HStack minH="6" gap="2" fontSize="sm" color="fg.muted">
           {categorize.isPending ? <Text>{t('form.looking')}</Text> : null}
           {!categorize.isPending && suggestion ? (
@@ -412,10 +325,9 @@ export function ExpenseForm({ categories, editing, onDone, compact = false, view
         </HStack>
 
         <HStack>
-          <Button type="submit"  loading={active.isPending}>
+          <Button type="submit" loading={active.isPending}>
             {editing ? t('form.save') : t('form.add')}
           </Button>
-          {/* Cancel reports no saved expense, because there isn't one. */}
           {editing ? (
             <Button variant="ghost" onClick={() => onDone?.()} type="button">
               {t('form.cancel')}

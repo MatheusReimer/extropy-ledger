@@ -66,20 +66,26 @@ describe('access tokens', () => {
 });
 
 describe('requireAuth', () => {
-  const passthrough = vi.fn(async (authed: AuthedRequest) => ({ status: 200, body: authed.userId }));
+  const passthrough = vi.fn(async (authed: AuthedRequest) => ({
+    status: 200,
+    body: authed.userId,
+  }));
   // No database: the middleware takes its repository factory as a parameter.
   const fakeRepos = async () => fakeRepositories();
 
   it('passes the verified userId to the handler', async () => {
     const token = await signAccessToken('507f1f77bcf86cd799439011');
-    const response = await requireAuth(passthrough, fakeRepos)(
-      request({ authorization: `Bearer ${token}` }),
-    );
+    const response = await requireAuth(
+      passthrough,
+      fakeRepos,
+    )(request({ authorization: `Bearer ${token}` }));
     expect(response.body).toBe('507f1f77bcf86cd799439011');
   });
 
   it('rejects a request with no Authorization header', async () => {
-    await expect(requireAuth(passthrough, fakeRepos)(request())).rejects.toMatchObject({ status: 401 });
+    await expect(requireAuth(passthrough, fakeRepos)(request())).rejects.toMatchObject({
+      status: 401,
+    });
   });
 
   it('rejects a header that is not a bearer token', async () => {

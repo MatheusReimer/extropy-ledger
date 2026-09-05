@@ -8,15 +8,6 @@ import { CategoriesIcon, OverviewIcon } from '../icons';
 
 export type ViewKey = 'overview' | 'categories';
 
-/**
- * Two destinations, not three.
- *
- * "Overview" and "Expenses" were showing the same data twice - the same add
- * form, the same table, the same numbers - and a nav that leads to a place you
- * have already been is worse than no nav. Everything to do with spending now
- * lives on one page; Categories stays separate because it answers a different
- * question and has its own editing surface.
- */
 const NAV: ReadonlyArray<{ key: ViewKey; labelKey: TranslationKey; Icon: typeof OverviewIcon }> = [
   { key: 'overview', labelKey: 'nav.overview', Icon: OverviewIcon },
   { key: 'categories', labelKey: 'nav.categories', Icon: CategoriesIcon },
@@ -35,18 +26,6 @@ type Props = {
   children: ReactNode;
 };
 
-/**
- * A persistent nav rail, which is the difference between an app and a page.
- *
- * Stacked full-width panels in one column is the shape every scaffold produces;
- * a rail that stays put while the content changes is what makes a product feel
- * like it has places in it. The three views also give each concern room to
- * breathe instead of competing for the same scroll.
- *
- * There is still no router. Two of these views have nothing worth deep-linking
- * to, and the third would need auth-aware routes to be useful - a dependency and
- * a redirect to express what a `useState` already expresses.
- */
 export function AppLayout({
   view,
   onViewChange,
@@ -60,7 +39,6 @@ export function AppLayout({
   const t = useT();
   return (
     <Flex minH="100dvh" bg="bg">
-      {/* Rail: a real sidebar from md up. */}
       <Box
         as="aside"
         display={{ base: 'none', md: 'flex' }}
@@ -74,14 +52,6 @@ export function AppLayout({
         bg="bg.panel"
         px="4"
         py="5"
-        /**
-         * Artwork rather than a flat panel.
-         *
-         * Anchored to the bottom, and the image itself fades to bare paper
-         * across its top quarter - so the nav labels never sit on colour and
-         * nothing has to be legible over the warm end of it. `cover` keeps it
-         * filling any viewport height without distorting the arcs.
-         */
         backgroundImage="url('/sidebar-art.jpg')"
         backgroundSize="cover"
         backgroundPosition="bottom center"
@@ -90,7 +60,6 @@ export function AppLayout({
       >
         <SidebarWaves />
 
-        {/* Everything below rides above the ripples. */}
         <Box px="2" mb="7" position="relative" zIndex="1">
           <Brand />
         </Box>
@@ -107,13 +76,6 @@ export function AppLayout({
           ))}
         </Stack>
 
-        {/*
-          Frosted, for the same reason the block below it is: this lands on the
-          saturated end of the artwork, where the muted text it contains measured
-          1.28:1 against the background - invisible, not merely quiet. A surface
-          of its own makes the contrast a property of the panel rather than a
-          gamble on where the gradient happens to sit at this viewport height.
-        */}
         <Box
           mb="4"
           position="relative"
@@ -129,18 +91,12 @@ export function AppLayout({
         </Box>
 
         {email ? (
-          /*
-            Frosted rather than transparent: this block lands on the saturated
-            end of the artwork, where muted text would fall below contrast. The
-            blur keeps the artwork legible behind it instead of covering it.
-          */
           <Stack
             gap="1"
             p="2.5"
             borderRadius="card"
             borderWidth="1px"
             borderColor="rgba(255,253,249,0.7)"
-            // 0.72 measured 4.16:1 for the muted text on it; 0.82 clears AA.
             bg="rgba(255,253,249,0.82)"
             backdropFilter="blur(10px)"
             position="relative"
@@ -157,11 +113,6 @@ export function AppLayout({
       </Box>
 
       <Flex direction="column" flex="1" ml={{ base: '0', md: SIDEBAR_WIDTH }} minW="0">
-        {/*
-          Mobile keeps the same three destinations as a scrollable tab row rather
-          than a drawer. A drawer hides the app's structure behind a tap and adds
-          open/close state for no gain at this size.
-        */}
         <Box
           display={{ base: 'block', md: 'none' }}
           borderBottomWidth="1px"
@@ -184,18 +135,21 @@ export function AppLayout({
               </Button>
             ) : null}
           </Flex>
-          <HStack gap="1" px="3" pb="2" overflowX="auto">
-            {NAV.map(({ key, labelKey, Icon }) => (
-              <NavItem
-                key={key}
-                label={t(labelKey)}
-                icon={<Icon size={16} />}
-                active={view === key}
-                onClick={() => onViewChange(key)}
-                compact
-              />
-            ))}
-          </HStack>
+          <Flex align="center" gap="2" px="3" pb="2">
+            <HStack gap="1" flex="1" minW="0" overflowX="auto">
+              {NAV.map(({ key, labelKey, Icon }) => (
+                <NavItem
+                  key={key}
+                  label={t(labelKey)}
+                  icon={<Icon size={16} />}
+                  active={view === key}
+                  onClick={() => onViewChange(key)}
+                  compact
+                />
+              ))}
+            </HStack>
+            <Preferences inline />
+          </Flex>
         </Box>
 
         <Box

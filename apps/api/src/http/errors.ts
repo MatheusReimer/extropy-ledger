@@ -1,13 +1,6 @@
 import type { ApiErrorBody, FieldErrors } from '@expense/shared';
 import type { HttpResponse } from './types.js';
 
-/**
- * The one place a class earns its keep on the backend.
- *
- * We need `instanceof` at the edge to tell "expected failure, becomes an HTTP
- * status" apart from "bug, becomes a 500", and we need a real stack trace when
- * it is a bug. A plain union type would give neither.
- */
 export class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -29,13 +22,6 @@ export const conflict = (message: string) => new HttpError(409, 'conflict', mess
 export const unprocessable = (fields: FieldErrors) =>
   new HttpError(422, 'validation_failed', 'Some fields are invalid', fields);
 
-/**
- * Turns any throw into a response.
- *
- * Unknown errors become a 500 with a deliberately generic message: internal
- * detail in an HTTP response is information disclosure (OWASP A05). The detail
- * goes to the log, not to the client.
- */
 export function toErrorResponse(error: unknown): HttpResponse {
   if (error instanceof HttpError) {
     const body: ApiErrorBody = {

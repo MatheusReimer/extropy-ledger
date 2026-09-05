@@ -5,16 +5,6 @@ import { ErrorState } from './StateViews';
 import { useI18n, useT } from '../i18n';
 import { formatDateShort } from '../lib/dates';
 
-/**
- * Shows the document an expense came from.
- *
- * The file is fetched only once this opens - a base64 payload per row would be
- * absurd to prefetch - and cached afterwards, so reopening is instant.
- *
- * A PDF gets an object embed rather than an <img>, and a download link either
- * way: browsers disagree about inline PDF rendering, and a link that always
- * works beats a viewer that sometimes does.
- */
 export function ReceiptViewer({
   expense,
   onClose,
@@ -25,7 +15,9 @@ export function ReceiptViewer({
   const t = useT();
   const { formatExpense } = useI18n();
   const receipt = useReceipt(expense?.receiptId);
-  const dataUrl = receipt.data ? `data:${receipt.data.mimeType};base64,${receipt.data.data}` : undefined;
+  const dataUrl = receipt.data
+    ? `data:${receipt.data.mimeType};base64,${receipt.data.data}`
+    : undefined;
   const isPdf = receipt.data?.mimeType === 'application/pdf';
 
   return (
@@ -46,7 +38,10 @@ export function ReceiptViewer({
                 <Dialog.Title fontSize="md">{expense?.description}</Dialog.Title>
                 {expense ? (
                   <Text fontSize="sm" color="fg.muted" fontWeight="normal">
-                    {formatExpense(expense.amountCents, expense.currency, expense.baseCents).original}{' '}
+                    {
+                      formatExpense(expense.amountCents, expense.currency, expense.baseCents)
+                        .original
+                    }{' '}
                     · {formatDateShort(expense.date)}
                   </Text>
                 ) : null}
@@ -74,9 +69,6 @@ export function ReceiptViewer({
                   bg="bg.subtle"
                 >
                   {isPdf ? (
-                    // A plain element rather than `Box as="object"`: Chakra's
-                    // polymorphic props do not model `data`/`type`, and casting
-                    // past that would be fighting the types to no benefit.
                     <object
                       data={dataUrl}
                       type="application/pdf"

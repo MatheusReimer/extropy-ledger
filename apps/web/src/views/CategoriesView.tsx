@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Badge, HStack, SimpleGrid, Stack, Text, Wrap } from '@chakra-ui/react';
+import { SimpleGrid, Stack, Text } from '@chakra-ui/react';
 import { useBudgets, useCategories, useMonthlySummary, useSetBudget } from '../api/hooks';
 import {
   CategoryCard,
@@ -12,14 +12,6 @@ import {
 import { useT } from '../i18n';
 import { formatMonth } from '../lib/dates';
 
-/**
- * Where the money went, and what was set aside for it.
- *
- * Split out of the dashboard page because it answers a different question from
- * the overview and shares nothing with it but the selected month - which the
- * shell owns. Its queries are its own; React Query serves the summary from cache
- * when the overview has already asked for the same month.
- */
 export function CategoriesView({ month }: { month: string }) {
   const t = useT();
   const categories = useCategories();
@@ -28,29 +20,19 @@ export function CategoriesView({ month }: { month: string }) {
   const summary = useMonthlySummary(month);
 
   const data = summary.data;
-  const budgetList = budgets.data ?? [];
   const budgetByCategory = useMemo(
-    () => new Map(budgetList.map((budget) => [budget.categoryId, budget.limitCents])),
-    [budgetList],
+    () => new Map((budgets.data ?? []).map((budget) => [budget.categoryId, budget.limitCents])),
+    [budgets.data],
   );
   const categoryNames = useMemo(
     () => new Map((categories.data ?? []).map((category) => [category.id, category.name])),
     [categories.data],
   );
 
-  const spentByCategory = data?.byCategory ?? [];
-
-  /**
-   * Every category worth a card: those spent in this month, plus those with a
-   * budget and nothing spent against it yet.
-   *
-   * The second group matters more than it looks. "You set aside $200 for Travel
-   * and have spent nothing" is real information, and dropping those rows would
-   * make a budget vanish from the page the moment it was doing its job.
-   */
   const byCategory = useMemo(() => {
-    const spentIds = new Set(spentByCategory.map((entry) => entry.categoryId));
-    const unspent = budgetList
+    const spent = data?.byCategory ?? [];
+    const spentIds = new Set(spent.map((entry) => entry.categoryId));
+    const unspent = (budgets.data ?? [])
       .filter((budget) => !spentIds.has(budget.categoryId))
       .map((budget) => ({
         categoryId: budget.categoryId,
@@ -58,15 +40,14 @@ export function CategoriesView({ month }: { month: string }) {
         totalCents: 0,
         count: 0,
       }))
-      // A category deleted from under its budget has no name to show.
       .filter((entry) => entry.name !== '');
-    return [...spentByCategory, ...unspent];
-  }, [spentByCategory, budgetList, categoryNames]);
+    return [...spent, ...unspent];
+  }, [data?.byCategory, budgets.data, categoryNames]);
 
   const largest = byCategory[0];
 
   return (
-<Stack gap={{ base: '4', md: '5' }}>
+    <Stack gap={{ base: '4', md: '5' }}>
       <Panel>
         <PanelHeading title={formatMonth(month)} hint={t('categories.byCategory')} />
         {summary.isPending ? <LoadingState /> : null}
@@ -96,25 +77,7 @@ export function CategoriesView({ month }: { month: string }) {
 
       <Panel>
         <PanelHeading title={t('categories.yours')} hint={t('categories.standard')} />
-        <Stack gap="5">
-          <Wrap gap="2">
-            {(categories.data ?? []).map((category) => (
-              <Badge
-                key={category.id}
-                size="sm"
-                variant={category.isCustom ? 'solid' : 'subtle'}
-                colorPalette={category.isCustom ? 'orange' : 'gray'}
-                borderRadius="full"
-                px="2.5"
-              >
-                {category.name}
-              </Badge>
-            ))}
-          </Wrap>
-          <HStack>
-            {categories.data ? <CategoryManager categories={categories.data} /> : null}
-          </HStack>
-        </Stack>
+        {categories.data ? <CategoryManager categories={categories.data} /> : null}
       </Panel>
     </Stack>
   );

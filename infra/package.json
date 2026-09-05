@@ -7,6 +7,7 @@
     "build": "tsc --noEmit",
     "synth": "cdk synth",
     "deploy": "cdk deploy --require-approval never",
+    "deploy:lambda": "cdk deploy --require-approval never -c lambdaOnly=true",
     "destroy": "cdk destroy --force"
   },
   "dependencies": {

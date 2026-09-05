@@ -3,13 +3,9 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 
-// The .env lives at the ROOT of the monorepo (one file, both apps). Loaded only
-// here - on Lambda the variables come from the environment and `dotenv` never
-// enters the bundle.
 const here = path.dirname(fileURLToPath(import.meta.url));
 loadDotenv({ path: path.resolve(here, '../../../.env'), quiet: true });
 
-// Imported after dotenv, because `config.ts` reads process.env on first use.
 const { getConfig } = await import('./config.js');
 const { closeDb } = await import('./db/client.js');
 const { resolveCorsHeaders } = await import('./http/cors.js');
@@ -18,13 +14,6 @@ const { createDispatcher } = await import('./http/router.js');
 const { describeError, logger } = await import('./lib/logger.js');
 const { routes } = await import('./routes/index.js');
 
-/**
- * A dev server that mounts the SAME routes as the Lambda.
- *
- * The challenge requires `pnpm install && pnpm dev` to bring the app up. A mock
- * API for development would be a second implementation to keep in sync; here the
- * only difference between dev and production is how a request reaches `dispatch`.
- */
 const dispatch = createDispatcher(routes);
 
 const readBody = (message: IncomingMessage): Promise<string> =>
@@ -40,8 +29,6 @@ function start(): void {
   try {
     config = getConfig();
   } catch (error) {
-    // A configuration failure has to be READABLE: the ConfigError message lists
-    // exactly what is missing from .env.
     console.error(`\n${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
     return;
@@ -74,8 +61,6 @@ function start(): void {
         });
         outgoing.end(payload);
       } catch (error) {
-        // Same as the Lambda adapter: the dispatcher already owns request-level
-        // failures, so reaching here means the socket itself misbehaved.
         logger.error('unhandled local error', describeError(error));
         const response = toErrorResponse(error);
         outgoing.writeHead(response.status, { ...corsHeaders, 'Content-Type': 'application/json' });
@@ -90,7 +75,9 @@ function start(): void {
       aiEnabled: config.aiEnabled,
     });
     if (!config.aiEnabled) {
-      console.warn('No GEMINI_API_KEY or GROQ_API_KEY - /ai/categorize will use rules + fallback only.');
+      console.warn(
+        'No GEMINI_API_KEY or GROQ_API_KEY - /ai/categorize will use rules + fallback only.',
+      );
     }
   });
 

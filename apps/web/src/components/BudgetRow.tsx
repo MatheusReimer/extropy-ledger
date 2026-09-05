@@ -1,15 +1,8 @@
 import { useState } from 'react';
 import { Box, Button, chakra, HStack, Input, Text } from '@chakra-ui/react';
-import { parseAmountToCents } from '@expense/shared';
+import { parseAmountToMinorUnits } from '@expense/shared';
 import { useI18n, useT } from '../i18n';
 
-/**
- * A real `<button>`, so the whole bar is keyboard-reachable and announces itself.
- *
- * Built with the `chakra` factory rather than `<Box as="button">` because the
- * factory types the element's own attributes - notably `type="button"`, without
- * which nesting this inside a form some day turns a budget edit into a submit.
- */
 const Pressable = chakra('button', {
   base: { textAlign: 'left', width: '100%', cursor: 'pointer', display: 'block' },
 });
@@ -21,36 +14,25 @@ type Props = {
   saving: boolean;
 };
 
-/**
- * A category's monthly ceiling, and how close this month is to it.
- *
- * Kept out of `CategoryCard` so that card stays one thing - "what was spent" -
- * and this stays another - "against what, and by whose choice". They are edited
- * at different times and would otherwise share a lump of local editing state
- * with the display logic.
- */
 export function BudgetRow({ spentCents, limitCents, onSave, saving }: Props) {
   const t = useT();
-  const { formatBase, toDisplayAmount, toBaseCents } = useI18n();
+  const { formatBase, toDisplayAmount, toBaseCents, displayCurrency } = useI18n();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [invalid, setInvalid] = useState(false);
 
   const open = () => {
-    // Seeded with the current limit so editing is a correction, not a re-entry.
     setDraft(limitCents === undefined ? '' : toDisplayAmount(limitCents));
     setInvalid(false);
     setEditing(true);
   };
 
   const commit = () => {
-    const typed = parseAmountToCents(draft);
+    const typed = parseAmountToMinorUnits(draft, displayCurrency);
     if (typed === null || typed < 0) {
       setInvalid(true);
       return;
     }
-    // Typed in whatever the user reads in; stored in the base currency, which is
-    // the unit the monthly report sums.
     onSave(toBaseCents(typed));
     setEditing(false);
   };
@@ -107,7 +89,6 @@ export function BudgetRow({ spentCents, limitCents, onSave, saving }: Props) {
   }
 
   const over = spentCents > limitCents;
-  // A zero budget is a real budget ("spend nothing here"), so it cannot divide.
   const used = limitCents > 0 ? Math.round((spentCents / limitCents) * 100) : over ? 100 : 0;
 
   return (
@@ -134,11 +115,6 @@ export function BudgetRow({ spentCents, limitCents, onSave, saving }: Props) {
       </Box>
       <HStack justify="space-between" fontSize="xs" color="fg.muted" pt="1.5" gap="2">
         <Text truncate>{t('budget.ofLimit', { limit: formatBase(limitCents) })}</Text>
-        {/*
-          Over-budget is never signalled by colour alone: the bar turns red AND
-          the label says so in words, so the state survives a colour-blind reader,
-          a greyscale print, and a screenshot in a chat window.
-        */}
         <Text
           whiteSpace="nowrap"
           fontWeight={over ? 'semibold' : 'normal'}

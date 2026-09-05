@@ -1,6 +1,13 @@
 import { ObjectId } from 'mongodb';
-import type { BudgetDoc, CategoryDoc, ExpenseDoc, ReceiptDoc, UserDoc } from '../../src/db/types.js';
-import type { Repositories } from '../../src/db/repositories/types.js';
+import type {
+  BudgetDoc,
+  CategoryDoc,
+  ExpenseDoc,
+  RateDoc,
+  ReceiptDoc,
+  UserDoc,
+} from '../../src/db/types.js';
+import type { AccountRepository, Repositories } from '../../src/db/repositories/types.js';
 
 /**
  * An in-memory stand-in for the persistence layer.
@@ -24,6 +31,7 @@ export type Seed = {
   categories?: CategoryDoc[];
   budgets?: BudgetDoc[];
   receipts?: ReceiptDoc[];
+  rates?: RateDoc[];
   user?: UserDoc;
 };
 
@@ -49,11 +57,11 @@ export function fakeRepositories(seed: Seed = {}): FakeRepositories {
     categories: seed.categories ? [...seed.categories] : [],
     budgets: seed.budgets ? [...seed.budgets] : [],
     receipts: seed.receipts ? [...seed.receipts] : [],
+    rates: seed.rates ? [...seed.rates] : [],
     user: seed.user,
   };
 
-  const inRange = (doc: ExpenseDoc, from: string, to: string) =>
-    doc.date >= from && doc.date <= to;
+  const inRange = (doc: ExpenseDoc, from: string, to: string) => doc.date >= from && doc.date <= to;
 
   return {
     state,
@@ -85,11 +93,17 @@ export function fakeRepositories(seed: Seed = {}): FakeRepositories {
         if (index === -1) return null;
         return state.expenses.splice(index, 1)[0] ?? null;
       },
-      async countInRange(from, to) {
+      async countByCategory(categoryId) {
+        return state.expenses.filter((e) => e.categoryId.equals(categoryId)).length;
+      },
+      async countUnconverted(from, to) {
         return state.expenses.filter((e) => inRange(e, from, to) && e.baseCents === null).length;
       },
       async totalsByCategory(from, to) {
-        const totals = new Map<string, { categoryId: ObjectId; totalCents: number; count: number }>();
+        const totals = new Map<
+          string,
+          { categoryId: ObjectId; totalCents: number; count: number }
+        >();
         for (const e of state.expenses) {
           if (!inRange(e, from, to) || e.baseCents === null) continue;
           const key = e.categoryId.toHexString();
@@ -118,11 +132,28 @@ export function fakeRepositories(seed: Seed = {}): FakeRepositories {
       async list() {
         return [...state.categories].sort((a, b) => a.name.localeCompare(b.name)).map(clone);
       },
+      async findById(id) {
+        const found = state.categories.find((c) => c._id.equals(id));
+        return found ? clone(found) : null;
+      },
       async insert(doc) {
         state.categories.push(clone(doc));
       },
       async exists(id) {
         return state.categories.some((c) => c._id.equals(id));
+      },
+      async rename(id, name, nameKey) {
+        const found = state.categories.find((c) => c._id.equals(id));
+        if (!found) return null;
+        found.name = name;
+        found.nameKey = nameKey;
+        return clone(found);
+      },
+      async remove(id) {
+        const index = state.categories.findIndex((c) => c._id.equals(id));
+        if (index === -1) return false;
+        state.categories.splice(index, 1);
+        return true;
       },
     },
 
@@ -175,6 +206,17 @@ export function fakeRepositories(seed: Seed = {}): FakeRepositories {
       },
     },
 
+    rates: {
+      async find(key) {
+        return state.rates.find((r) => r._id === key) ?? null;
+      },
+      async save(doc) {
+        const index = state.rates.findIndex((r) => r._id === doc._id);
+        if (index === -1) state.rates.push(clone(doc));
+        else state.rates[index] = clone(doc);
+      },
+    },
+
     user: {
       async find() {
         return state.user ?? null;
@@ -184,6 +226,34 @@ export function fakeRepositories(seed: Seed = {}): FakeRepositories {
         Object.assign(state.user, changes);
         return clone(state.user);
       },
+    },
+  };
+}
+
+/**
+ * An in-memory stand-in for the UNSCOPED account repository.
+ *
+ * Separate from `fakeRepositories` for the same reason the real one is separate:
+ * sign-up and log-in run before there is a user to scope to, so they cannot be
+ * handed a user-scoped repository. Keeping the two apart in the fakes as well
+ * means a test cannot accidentally prove something the production wiring could
+ * never do.
+ */
+export type FakeAccounts = AccountRepository & {
+  readonly state: { users: UserDoc[]; categories: CategoryDoc[] };
+};
+
+export function fakeAccounts(users: UserDoc[] = []): FakeAccounts {
+  const state = { users: [...users], categories: [] as CategoryDoc[] };
+
+  return {
+    state,
+    async findByEmail(email) {
+      return state.users.find((u) => u.email === email) ?? null;
+    },
+    async create(user, categories) {
+      state.users.push(clone(user));
+      state.categories.push(...categories.map(clone));
     },
   };
 }

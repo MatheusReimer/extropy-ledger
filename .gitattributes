@@ -1,0 +1,14 @@
+# Normalise to LF in the working tree on every platform.
+#
+# Without this, a clone on Windows with core.autocrlf=true checks out CRLF,
+# and `pnpm format:check` fails on a fresh clone because Prettier is configured
+# with endOfLine: "lf". The brief asks for a repo that runs with minimal setup,
+# so the line endings cannot depend on the machine.
+* text=auto eol=lf
+
+# Binary, never touched.
+*.jpg binary
+*.png binary
+*.webp binary
+*.pdf binary
+*.ico binary

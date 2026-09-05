@@ -2,14 +2,6 @@ import { Box, HStack, Stack, Text } from '@chakra-ui/react';
 import { ReceiptIcon, UploadIcon } from './icons';
 import { useT } from '../i18n';
 
-/**
- * The screen a reviewer sees first, and previously the weakest one in the app.
- *
- * An empty dataset used to render "No expenses in this range" - an apology for a
- * state that is not an error. A new account has nothing in it by definition, so
- * this is the *expected* first view and deserves to be the one that teaches the
- * app's best trick rather than the one that shrugs.
- */
 export function FirstRun() {
   const t = useT();
   const steps = [
@@ -25,7 +17,14 @@ export function FirstRun() {
     },
     {
       icon: (
-        <Box as="span" fontSize="md" fontWeight="semibold" lineHeight="1" width="17px" textAlign="center">
+        <Box
+          as="span"
+          fontSize="md"
+          fontWeight="semibold"
+          lineHeight="1"
+          width="17px"
+          textAlign="center"
+        >
           $
         </Box>
       ),

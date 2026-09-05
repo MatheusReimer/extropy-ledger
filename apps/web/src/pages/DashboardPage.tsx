@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NativeSelect } from '@chakra-ui/react';
 import { useAuth } from '../auth/AuthContext';
-import { AppLayout, type ViewKey } from '../components/layout/AppLayout';
+import { AppLayout, type ViewKey } from '../components';
 import { CategoriesView } from '../views/CategoriesView';
 import { OverviewView } from '../views/OverviewView';
 import { useT } from '../i18n';
@@ -9,25 +9,12 @@ import { currentMonth, formatMonth, recentMonths } from '../lib/dates';
 
 const MONTH_OPTIONS = recentMonths(12);
 
-/** "matheus@example.com" -> "Matheus". A greeting should use a name, not an address. */
 function greetingName(email: string | undefined): string {
   const local = email?.split('@')[0] ?? '';
   const word = local.split(/[._-]/)[0] ?? '';
   return word ? word.charAt(0).toUpperCase() + word.slice(1) : 'there';
 }
 
-/**
- * The shell: which view is showing, and which month everything is about.
- *
- * Deliberately thin. This was a 448-line component that fetched six queries,
- * derived a dozen values and rendered two entirely different screens, and the
- * two screens shared nothing except the month. Each view now owns its own data,
- * which is why nothing is passed down here but `month` - and why a change inside
- * the categories view cannot re-render the overview.
- *
- * The month lives here rather than in either view because it is the one piece of
- * state they genuinely share: switching view should not lose your place.
- */
 export function DashboardPage() {
   const t = useT();
   const { session, signOut } = useAuth();
@@ -39,7 +26,7 @@ export function DashboardPage() {
       <NativeSelect.Field
         value={month}
         onChange={(event) => setMonth(event.target.value)}
-        aria-label="Report month"
+        aria-label={t('reports.month')}
         borderRadius="control"
       >
         {MONTH_OPTIONS.map((option) => (

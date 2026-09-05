@@ -33,27 +33,11 @@ const isAcceptedType = (type: string): type is ReceiptMimeType =>
 
 type Preview = { url: string; name: string; isImage: boolean };
 
-/**
- * Which words a failed read deserves, and whether trying again is worth offering.
- *
- * A busy reader and an unreadable document are different problems and need
- * different answers. 503 means the request never got as far as an answer - the
- * document is very likely fine, so the app says so and offers a retry. 422 means
- * the model looked and found nothing, which no amount of retrying will change,
- * so it asks the user to act instead.
- *
- * These used to share one message, and it told people to take a clearer photo
- * when the real problem was a congested free tier.
- *
- * Exported and pure so the branch is testable without mounting the component -
- * the message a user reads at their worst moment deserves a test.
- */
 export function describeFailure(
   error: unknown,
   t: (key: TranslationKey) => string,
 ): { message: string | undefined; canRetry: boolean } {
   if (!(error instanceof ApiError)) return { message: undefined, canRetry: false };
-  // The server already phrases 422 for the specific document; pass it through.
   if (error.status === 422) return { message: error.message, canRetry: false };
   return { message: t('receipt.unavailable'), canRetry: error.status === 503 };
 }
@@ -67,16 +51,9 @@ export function ReceiptDropzone({ onExtracted }: Props) {
   const [summary, setSummary] = useState<ExtractedExpense | undefined>(undefined);
   const [preview, setPreview] = useState<Preview | undefined>(undefined);
 
-  /**
-   * The last payload, kept so a retry costs one click rather than another trip
-   * through the file picker.
-   *
-   * Held in a ref rather than state: nothing renders from it, and putting it in
-   * state would re-render the dropzone on every upload for no visible change.
-   */
-  const lastPayload = useRef<{ fileName: string; mimeType: ReceiptMimeType; data: string } | undefined>(
-    undefined,
-  );
+  const lastPayload = useRef<
+    { fileName: string; mimeType: ReceiptMimeType; data: string } | undefined
+  >(undefined);
   const extract = useExtractReceipt();
 
   const reset = () => {
@@ -94,8 +71,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
       return;
     }
 
-    // The same data URL feeds the thumbnail and the request, so the user is
-    // looking at exactly the bytes the model is reading.
     setPreview({ url: data, name: fileName, isImage: mimeType !== 'application/pdf' });
     lastPayload.current = { fileName, mimeType, data };
 
@@ -112,8 +87,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
 
   const accept = async (file: File) => {
     reset();
-    // Checked here purely to save a pointless round trip. The server checks the
-    // real bytes regardless, because a browser's type is only a claim.
     if (!isAcceptedType(file.type)) {
       setLocalError(t('receipt.wrongType'));
       return;
@@ -127,8 +100,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
 
   const handleInput = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    // Let the same file be picked twice in a row - without this, re-selecting it
-    // after an error fires no change event at all.
     event.target.value = '';
     if (file) await accept(file);
   };
@@ -154,7 +125,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
       },
     });
   };
-
 
   return (
     <Stack gap="3">
@@ -251,13 +221,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
         )}
       </Box>
 
-      {/*
-        A download rather than a one-click demo, on purpose.
-        Fetching it silently would skip the part worth showing - that a person
-        picks a real file off their own machine and it works. Saving it first
-        means the reviewer exercises the actual browse-and-upload path, and ends
-        up holding a file they can re-try, rename, or corrupt to see what happens.
-      */}
       {preview ? null : (
         <HStack gap="1.5" fontSize="xs" color="fg.muted" justify="center">
           <Text>{t('receipt.noReceipt')}</Text>
@@ -286,10 +249,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Description>{notice}</Alert.Description>
-            {/* Offered only when trying again could actually help. Gated on
-                `preview` rather than the ref, because a ref read during render
-                is not a render input - `preview` is set in the same breath as
-                the payload, so it is the honest signal that one exists. */}
             {canRetry && preview ? (
               <Box mt="2">
                 <Button
@@ -307,13 +266,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
         </Alert.Root>
       ) : null}
 
-      {/*
-        Reported back honestly: what was found, and how sure the model was.
-
-        There used to be a warning here about currency mismatches, back when
-        every amount was assumed to be USD. The expense now carries the currency
-        the receipt printed, so there is no mismatch left to warn about.
-      */}
       {summary && !extract.isPending ? (
         <HStack gap="2" flexWrap="wrap" fontSize="sm" color="fg.muted">
           <Badge
@@ -336,8 +288,6 @@ export function ReceiptDropzone({ onExtracted }: Props) {
           )}
         </HStack>
       ) : null}
-
-
     </Stack>
   );
 }

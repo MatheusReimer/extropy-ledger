@@ -14,24 +14,10 @@ import {
   faUtensils,
 } from '@fortawesome/free-solid-svg-icons';
 
-/**
- * A glyph per predefined category.
- *
- * Colour was the obvious way to give categories identity, and it did not survive
- * testing: two candidate palettes were run through a colour-vision validator and
- * both failed - five hues read as grey, and one adjacent pair sat at
- * deuteranopia deltaE 3.9. Eleven categories also overruns the eight slots past
- * which no categorical palette stays separable.
- *
- * Shape has none of those limits. It reads identically to every viewer, survives
- * greyscale printing, and works at 14px in a table cell where a colour swatch
- * would just be a dot. Font Awesome supplies the shapes now, rendered the same
- * runtime-free way as `icons.tsx` - see the note there.
- */
 type Props = Omit<SVGProps<SVGSVGElement>, 'children'> & { name: string; size?: number };
 
 const ICONS: Record<string, IconDefinition> = {
-  groceries: faBasketShopping,
+  food: faBasketShopping,
   dining: faUtensils,
   transport: faBus,
   housing: faHouse,
@@ -44,7 +30,6 @@ const ICONS: Record<string, IconDefinition> = {
   other: faTag,
 };
 
-/** A custom category has no known shape; a tag is the honest generic. */
 const CUSTOM = faTag;
 
 export function CategoryIcon({ name, size = 16, ...rest }: Props) {

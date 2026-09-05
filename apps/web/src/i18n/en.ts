@@ -1,12 +1,3 @@
-/**
- * The source language, and the shape every other translation must satisfy.
- *
- * Written as a plain object rather than pulled in through i18next or similar.
- * For three languages and this many strings, a library buys lazy loading and
- * plural rules we do not need, in exchange for a runtime, a config, and a
- * lookup that fails at runtime instead of at compile time. Here a missing or
- * misspelled key is a type error - see `index.tsx`.
- */
 export const en = {
   'brand.name': 'Ledger',
 
@@ -85,7 +76,6 @@ export const en = {
   'receipt.noReceipt': 'No receipt handy?',
   'receipt.downloadSample': 'Download a sample',
   'receipt.andUpload': 'and upload it.',
-  'receipt.reading': 'Reading the document — this usually takes a few seconds.',
   'receipt.stageReading': 'Reading the document',
   'receipt.stageMerchant': 'Finding the merchant',
   'receipt.stageTotal': 'Working out the total',
@@ -93,13 +83,12 @@ export const en = {
   'receipt.filled': 'Filled in below',
   'receipt.lowConfidence': 'Low confidence',
   'receipt.noTotal': 'No total found — enter the amount yourself.',
-  'receipt.found': 'Found {amount}{at} · {percent}% confident',
   'receipt.at': ' at {merchant}',
   'receipt.wrongType': 'Choose a PDF, JPEG, PNG or WebP file.',
   'receipt.tooLarge': 'That file is larger than {mb} MB.',
   'receipt.unreadable': 'Could not read that file.',
-  'receipt.sampleFailed': 'Could not load the sample receipt.',
-  'receipt.unavailable': 'The reader is busy right now. It is not your photo — try again in a moment.',
+  'receipt.unavailable':
+    'The reader is busy right now. It is not your photo — try again in a moment.',
   'receipt.retry': 'Try again',
   'receipt.retrying': 'Trying again…',
   'receipt.readSuccess': 'Read successfully',
@@ -108,7 +97,8 @@ export const en = {
   'receipt.view': 'Receipt',
   'receipt.fetching': 'Fetching the receipt…',
   'receipt.download': 'Download original',
-  'receipt.noInlinePdf': 'Your browser will not display this PDF inline. Use the download link below.',
+  'receipt.noInlinePdf':
+    'Your browser will not display this PDF inline. Use the download link below.',
 
   'table.date': 'Date',
   'table.description': 'Description',
@@ -123,6 +113,8 @@ export const en = {
   'expenses.newestFirst': 'Newest first',
   'export.csv': 'Export CSV',
   'export.hint': 'Downloads the expenses shown, with the filters applied.',
+  'reports.month': 'Report month',
+
   'filters.from': 'From',
   'filters.to': 'To',
   'filters.category': 'Category',
@@ -146,6 +138,11 @@ export const en = {
   'categories.nothingIn': 'Nothing logged in {month} yet.',
   'categories.newPlaceholder': 'New category — you have {count}',
   'categories.add': 'Add',
+  'categories.rename': 'Rename',
+  'categories.remove': 'Remove',
+  'categories.saveName': 'Save',
+  'categories.cancelRename': 'Cancel',
+  'categories.protected': 'Kept for anything that does not fit elsewhere',
   'categories.ofMonth': '{percent}% of month',
   'categories.expense': 'expense',
   'categories.expenses': 'expenses',
@@ -159,7 +156,6 @@ export const en = {
   'budget.left': '{amount} left',
   'budget.over': '{amount} over',
   'budget.usedOf': '{percent}% of budget used',
-  'budget.noSpend': 'Nothing spent yet',
 
   'settings.title': 'Preferences',
   'settings.currency': 'Display currency',

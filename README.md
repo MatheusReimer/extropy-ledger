@@ -7,12 +7,12 @@ for you. Log what you spend, organise it by category, and see where the money we
 Built for the Extropy full-stack home challenge: **Option 1 (Personal Expense Tracker)** plus
 **AI Option B (AI-Augmented Content & Categorization)**.
 
-| | |
-|---|---|
-| **Repository** | https://github.com/MatheusReimer/extropy-ledger |
-| **Live app** | https://k7dptwm6x7.execute-api.us-east-1.amazonaws.com |
-| **API** | https://k7dptwm6x7.execute-api.us-east-1.amazonaws.com/api — same host as the app, on purpose |
-| **Deploy note** | Running in the Lambda-served variant, because a new AWS account cannot create CloudFront distributions until AWS verifies it. Same code, one CDK flag — see [DEPLOYMENT.md](DEPLOYMENT.md). |
+|                 |                                                                                                                                                                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Repository**  | https://github.com/MatheusReimer/extropy-ledger                                                                                                                                                                                                                                                                                 |
+| **Live app**    | https://k7dptwm6x7.execute-api.us-east-1.amazonaws.com                                                                                                                                                                                                                                                                          |
+| **API**         | https://k7dptwm6x7.execute-api.us-east-1.amazonaws.com/api — same host as the app, on purpose                                                                                                                                                                                                                                   |
+| **Deploy note** | Running in the Lambda-served variant, because a new AWS account cannot create CloudFront distributions until AWS verifies it. Same code, one CDK flag — see [DEPLOYMENT.md](DEPLOYMENT.md). The CloudFront branch has never run in an account, so it is pinned by CDK template assertions instead: `infra/tests/stack.test.ts`. |
 
 ---
 
@@ -20,15 +20,15 @@ Built for the Extropy full-stack home challenge: **Option 1 (Personal Expense Tr
 
 ### Prerequisites
 
-| | Version | Notes |
-|---|---|---|
-| Node.js | **≥ 22** | The Lambda runtime is `nodejs22.x`; local dev matches it. |
-| pnpm | **11.x** | `corepack enable` picks up the pinned version from `package.json`. |
-| MongoDB Atlas | M0 (free) | Any connection string works; a local `mongod` is fine too. |
-| AWS CLI | v2 | Only needed to deploy. Configured credentials + one `cdk bootstrap`. |
-| Gemini API key | — | **Optional**, free, no card. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| Groq API key | — | **Optional**, free, no card. Second provider for *categorisation* — see [why there are two](#why-two-providers). |
-| OpenRouter key | — | **Optional**, free. Second *vendor* for reading receipts. [openrouter.ai/keys](https://openrouter.ai/keys) |
+|                | Version   | Notes                                                                                                            |
+| -------------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
+| Node.js        | **≥ 22**  | The Lambda runtime is `nodejs22.x`; local dev matches it.                                                        |
+| pnpm           | **11.x**  | `corepack enable` picks up the pinned version from `package.json`.                                               |
+| MongoDB Atlas  | M0 (free) | Any connection string works; a local `mongod` is fine too.                                                       |
+| AWS CLI        | v2        | Only needed to deploy. Configured credentials + one `cdk bootstrap`.                                             |
+| Gemini API key | —         | **Optional**, free, no card. [aistudio.google.com/apikey](https://aistudio.google.com/apikey)                    |
+| Groq API key   | —         | **Optional**, free, no card. Second provider for _categorisation_ — see [why there are two](#why-two-providers). |
+| OpenRouter key | —         | **Optional**, free. Second _vendor_ for reading receipts. [openrouter.ai/keys](https://openrouter.ai/keys)       |
 
 ### Four commands
 
@@ -163,7 +163,7 @@ Spending 300 ms and a paid API call to learn that coffee is Dining is using AI w
 
 Phrases are matched **before** single words, for one concrete reason: `"uber eats"` contains
 `"uber"`. Word-first matching would file a dinner under Transport at 95% confidence, and a
-*confidently wrong* answer is worse than no suggestion. There is a test pinning exactly that.
+_confidently wrong_ answer is worse than no suggestion. There is a test pinning exactly that.
 
 **② and ③, the providers**, are asked only about what is genuinely ambiguous — an unknown
 merchant, free text, a description a lookup table will never cover.
@@ -191,7 +191,7 @@ Live, that is exactly what happens:
 **Two budgets, and the second one took a live test to find.** The first version used a single
 8-second deadline shared by the chain. It looked right and was not: when Gemini stalled it
 consumed the whole budget, the chain logged `budgetExpired: true`, and Groq was never called
-at all. *A fallback the primary can starve is not a fallback.* Each attempt now gets its own
+at all. _A fallback the primary can starve is not a fallback._ Each attempt now gets its own
 4-second slice bounded by whatever remains of the 8-second total, so a hung provider costs its
 slice and nothing more — which is why those two rows above are 4.5-second successes rather
 than 8-second failures. Two unit tests pin the behaviour down.
@@ -222,7 +222,7 @@ and every extra token is latency they feel.
   politely in the prompt. That removes the whole genre of fenced code blocks and apologetic
   paragraphs. The two spell schemas differently, so `ai/schema.ts` renders the same contract
   into each dialect from one definition.
-- **The enum carries *this user's* real categories**, custom ones included, which is why the
+- **The enum carries _this user's_ real categories**, custom ones included, which is why the
   schema is built per request rather than being a constant. Someone who created "Pets" can be
   offered "Pets"; nobody can be offered a category that does not exist in their account.
 - **Thinking is turned down as far as the model allows** (`thinkingLevel: MINIMAL`). Picking
@@ -237,7 +237,7 @@ and every extra token is latency they feel.
 - **Two instructions earn their place** because they change behaviour: report confidence
   honestly (so the UI can decide whether to preselect or merely suggest), and classify rather
   than guess. Everything else the schema already specifies.
-- **The output is revalidated anyway** (`ai/parse.ts`). The schema *should* be enough;
+- **The output is revalidated anyway** (`ai/parse.ts`). The schema _should_ be enough;
   "should" is not a strong enough guarantee for a path that ends in a database write, and a
   response truncated at the output-token limit is still valid UTF-8 and invalid JSON. Any
   parse failure or off-list answer routes to the fallback instead of persisting a category
@@ -245,19 +245,46 @@ and every extra token is latency they feel.
 
 ### Cost and latency — when is it worth calling?
 
-| Decision | Reasoning |
-|---|---|
-| Rules first | The majority of real expenses are recognisable merchants. Those cost nothing and answer in microseconds. |
-| **On blur, not on keystroke** | Per keystroke, "Starbucks downtown" is ~20 calls. On blur it is one call per expense — and only while the user has not already picked a category. |
-| Skip once the user chooses | If they have decided, there is nothing to suggest. |
-| Per-container cache | Descriptions repeat heavily. The result depends only on the text and the category list, so it is safe to share within a container — and it dies with the Lambda, no Redis in an MVP. |
-| Fallbacks are **not** cached | That failure was in the transport, not the description; the next attempt deserves a fresh chance. |
-| Flash-Lite, minimal thinking | It is a classification, not an essay. |
-| One 8 s budget for the whole chain | Past that, picking from the dropdown is faster than waiting. Falling back is then the *correct* behaviour, not a degradation. |
+| Decision                           | Reasoning                                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rules first                        | The majority of real expenses are recognisable merchants. Those cost nothing and answer in microseconds.                                          |
+| **On blur, not on keystroke**      | Per keystroke, "Starbucks downtown" is ~20 calls. On blur it is one call per expense — and only while the user has not already picked a category. |
+| Skip once the user chooses         | If they have decided, there is nothing to suggest.                                                                                                |
+| **No result cache**                | There was one, per container. It was removed — see below.                                                                                         |
+| Fallbacks are **not** cached       | That failure was in the transport, not the description; the next attempt deserves a fresh chance.                                                 |
+| Flash-Lite, minimal thinking       | It is a classification, not an essay.                                                                                                             |
+| One 8 s budget for the whole chain | Past that, picking from the dropdown is faster than waiting. Falling back is then the _correct_ behaviour, not a degradation.                     |
 
 The response carries `source` so the **UI can be honest about provenance** — "matched a known
 merchant" versus "suggested by Gemini · 82% confident" versus "no confident match". A fallback
 preselects nothing: offering "Other" at zero confidence would be faking an answer.
+
+### The cache I removed, and why
+
+An earlier version memoised results in a per-container `Map`, on the usual reasoning:
+descriptions repeat, the answer depends only on the text and the category list, and a provider
+call costs 700 ms at best. It survived review until someone asked how often a description would
+actually repeat between two requests. It does not hold up.
+
+**The rule pre-pass eats every repeat worth having.** Starbucks, Uber, Netflix — the merchants
+that recur — are answered by the keyword table and never reach a provider. So the cache could
+only ever hold descriptions that missed all 122 keywords: the long tail, which is by definition
+the set least likely to repeat. The cache stored exactly the entries with the lowest chance of a
+second hit.
+
+**Three more conditions had to hold at once** for a hit: the same warm container, an unchanged
+category list, and a repeat that the client had not already absorbed — `ExpenseForm` skips a
+request when the description has not changed since the last suggestion, which removes the
+common case before it reaches the API.
+
+**And it was quietly wrong.** `buildUserPrompt` sends the amount to the model when one is
+present; the cache key was description plus category list only. "Transfer" at 5.00 and
+"transfer" at 2,400.00 shared an entry, so the second request could receive an answer computed
+for a different amount. Adding the amount to the key would have fixed that and pushed the hit
+rate lower still — a cache that gets less useful the more correct you make it is not paying for
+itself.
+
+Rules first, model second, fallback last. No memoisation between them.
 
 ### Why these providers
 
@@ -294,11 +321,11 @@ POST /ai/extract-receipt   { fileName, mimeType, data: <base64> }
 
 Measured against the live API:
 
-| Input | Time | Result |
-|---|---|---|
-| Generated PDF invoice | **2.1 s** | `240.45 BRL` — the total, not the `229.00` subtotal |
-| Skewed, noisy JPEG "photo" | **6.0 s** | `97.17 BRL` — the post-discount total, not the `102.17` subtotal |
-| The shipped sample | **4.7 s** | `209.90 BRL` — subtotal `199.00`, **plus** 10% service, **minus** a discount |
+| Input                      | Time      | Result                                                                       |
+| -------------------------- | --------- | ---------------------------------------------------------------------------- |
+| Generated PDF invoice      | **2.1 s** | `240.45 BRL` — the total, not the `229.00` subtotal                          |
+| Skewed, noisy JPEG "photo" | **6.0 s** | `97.17 BRL` — the post-discount total, not the `102.17` subtotal             |
+| The shipped sample         | **4.7 s** | `209.90 BRL` — subtotal `199.00`, **plus** 10% service, **minus** a discount |
 
 ### Try it without finding a receipt
 
@@ -395,10 +422,10 @@ rather than oversights:
 Reading a receipt goes Gemini first, then a different vendor entirely. The two rungs are not
 redundancy for its own sake - they fail for different reasons:
 
-| Rung | Survives | Does not survive |
-| --- | --- | --- |
-| **Gemini, two models hedged** | a congested or slow model — the common case by far | anything that takes the account down |
-| **OpenRouter** | a revoked key, an exhausted daily quota, a Google outage | nothing left after this |
+| Rung                          | Survives                                                 | Does not survive                     |
+| ----------------------------- | -------------------------------------------------------- | ------------------------------------ |
+| **Gemini, two models hedged** | a congested or slow model — the common case by far       | anything that takes the account down |
+| **OpenRouter**                | a revoked key, an exhausted daily quota, a Google outage | nothing left after this              |
 
 Hedging two models of the same vendor was never a defence against a bad key or a spent quota:
 all of Google's models die together. That is the gap this second vendor closes, and it is worth
@@ -419,7 +446,7 @@ hold thirty lines is not a trade worth making.
 let through:
 
 1. **`response_format` is advertised, not enforced.** Asked with `json_schema` and
-   `strict: true`, the model read the receipt perfectly and answered in *markdown prose* —
+   `strict: true`, the model read the receipt perfectly and answered in _markdown prose_ —
    `- **Merchant:** Harbor & Pine`. OpenRouter passes the field upstream and hopes; Gemini needs
    none of this because its schema constrains decoding. One explicit sentence in the prompt is
    what actually produces JSON, verified across three models: with it, all three complied; without
@@ -456,7 +483,7 @@ Two models, up to two attempts each, and the two loops answer different question
 
 - **Retrying the same model** is only worth it when the failure could genuinely go the other
   way — congestion clears in 700 ms, a 404 will not. So `isTransient` governs the inner loop.
-- **Moving to the next model** is worth it for *any* failure, including a flat "no expense
+- **Moving to the next model** is worth it for _any_ failure, including a flat "no expense
   here" — because a different model has different vision.
 
 That second point was a bug I had to be argued out of. The first version stopped dead on
@@ -489,27 +516,27 @@ is only needed to tell "nobody could read it" from "nobody could be reached".
 
 Measured against the live API, twelve consecutive reads:
 
-| | Before (sequential) | After (hedged) |
-| --- | --- | --- |
-| p50 | ~4 s | **3.7 s** |
-| p90 | — | **10.3 s** |
-| Slowest | **27.4 s** | **10.7 s** |
-| Over the 25 s budget | yes | **none** |
+|                      | Before (sequential) | After (hedged) |
+| -------------------- | ------------------- | -------------- |
+| p50                  | ~4 s                | **3.7 s**      |
+| p90                  | —                   | **10.3 s**     |
+| Slowest              | **27.4 s**          | **10.7 s**     |
+| Over the 25 s budget | yes                 | **none**       |
 
 And the ladder's other guarantees, verified separately:
 
-| Scenario | Result | Time |
-| --- | --- | --- |
-| Healthy primary | read correctly, first model | 2.3 s |
-| Primary is a dead model | **recovered on the fallback**, same values | 2.3 s |
-| Primary finds no expense | **second model asked**, both agree → `unreadable` | 5.8 s |
-| Primary hangs indefinitely | **fallback answers**, primary cancelled | < 12 s |
-| Every model unreachable | `unavailable` → 503 | 2.4 s |
+| Scenario                   | Result                                            | Time   |
+| -------------------------- | ------------------------------------------------- | ------ |
+| Healthy primary            | read correctly, first model                       | 2.3 s  |
+| Primary is a dead model    | **recovered on the fallback**, same values        | 2.3 s  |
+| Primary finds no expense   | **second model asked**, both agree → `unreadable` | 5.8 s  |
+| Primary hangs indefinitely | **fallback answers**, primary cancelled           | < 12 s |
+| Every model unreachable    | `unavailable` → 503                               | 2.4 s  |
 
 ### Two failures, because they ask different things of the user
 
 This is the part worth reading. The first version collapsed every failure into one message:
-*"Could not read an expense from that file. Try a clearer photo."* That message is actively
+_"Could not read an expense from that file. Try a clearer photo."_ That message is actively
 harmful when the real cause is a busy free tier — it sends someone off to re-photograph a
 receipt that was never the problem, and no number of retakes will fix a 429.
 
@@ -518,7 +545,7 @@ So `ReadOutcome` distinguishes them, and the distinction is drawn in exactly one
 ```ts
 type ReadOutcome =
   | { status: 'ok'; fields: ExtractedFields }
-  | { status: 'unreadable' }   // the model answered, and found no expense
+  | { status: 'unreadable' } // the model answered, and found no expense
   | { status: 'unavailable' }; // we never got an answer at all
 ```
 
@@ -526,7 +553,7 @@ type ReadOutcome =
 — 429, 503, timeout, and equally a 400 or a 404 from a retired model name — is
 `unavailable`, because a request that threw never got as far as looking at the document.
 
-And `unreadable` needs *every* model to have looked and agreed. If one model gave up while
+And `unreadable` needs _every_ model to have looked and agreed. If one model gave up while
 another was never reached, the answer is `unavailable`, not `unreadable` — the unreached model
 might have read it perfectly well, and "your receipt is illegible" is a claim the app should
 not make on partial evidence.
@@ -534,15 +561,15 @@ not make on partial evidence.
 That last case was a real bug, caught by testing the ladder against a nonexistent model
 rather than assuming it worked: a 404 is not congestion, so an earlier version classified it
 as `unreadable` and blamed the user's photo for what was actually our own stale config. The
-status code tells you whether *retrying* is worthwhile; it never tells you whose fault it
+status code tells you whether _retrying_ is worthwhile; it never tells you whose fault it
 was. `tests/reader-ladder.test.ts` pins that down for 400, 401, 403 and 404.
 
 The two outcomes reach the user as two different offers:
 
-| Outcome | HTTP | What the user is told | What they are offered |
-| --- | --- | --- | --- |
-| `unreadable` | 422 | "Could not find an expense in that file." | Type it in — retrying cannot help |
-| `unavailable` | 503 | "The reader is busy. **It is not your photo.**" | A **Retry** button |
+| Outcome       | HTTP | What the user is told                           | What they are offered             |
+| ------------- | ---- | ----------------------------------------------- | --------------------------------- |
+| `unreadable`  | 422  | "Could not find an expense in that file."       | Type it in — retrying cannot help |
+| `unavailable` | 503  | "The reader is busy. **It is not your photo.**" | A **Retry** button                |
 
 Retry is cheap because the receipt is already stored server-side before the read is attempted,
 so trying again re-reads a file that is already on the server rather than re-uploading it.
@@ -589,17 +616,47 @@ row and its own report disagree — the one bug in this area a user would actual
 
 `getRate` returns `undefined` rather than falling back to 1.0. A silent rate of 1.0 turns
 ¥15,000 into $15,000 and looks entirely plausible on screen. `baseCents` stays `null`, the
-expense still saves, and the UI reports "*n* expenses could not be converted" rather than
-inventing a total.
+expense still saves, it is left out of the total rather than counted at a made-up rate, and the
+overview shows "_n_ expenses could not be converted" above the report. When no rate can be had
+at all — the upstream is down and the display currency is not USD — a second line says amounts
+are shown as spent.
 
 Rates come from **Frankfurter** (ECB reference rates, no key, no quota — the same "clone it
 and it works" reasoning as the optional LLM keys), behind three layers of cache: identity
 (`USD→USD` never leaves the process), a per-container memo, then MongoDB with a TTL index on
 "latest" and no expiry on historical rates.
 
-`formatMoney` reads `maximumFractionDigits` off `Intl.NumberFormat().resolvedOptions()` rather
-than dividing by 100 — JPY has no minor unit, and hardcoding a hundred would report every yen
-amount as a hundredth of itself. There is a test for exactly that.
+### 4. A minor unit is not always a hundredth — and this was a real bug
+
+Amounts are integers in the currency's **own minor units**. USD has a hundred cents to the
+dollar; JPY has one yen to the yen. `minorUnitDigits` reads that exponent from
+`Intl.NumberFormat().resolvedOptions()` rather than a table of our own, so it always agrees
+with the formatter.
+
+`formatMoney` got this right from the start. **Nothing else did**, and the audit that found it
+is worth writing down, because the shape of the mistake is more interesting than the fix:
+
+|                                  | before                     | should be       |
+| -------------------------------- | -------------------------- | --------------- |
+| Typing `15000` with JPY selected | stored `1500000`           | `15000`         |
+| Editing that expense             | field showed `150.00`      | `15000`         |
+| Converting ¥15,000 to USD        | `baseCents: 94` — 94 cents | `9405` — $94.05 |
+| Showing $94.05 in yen            | `¥1,500,240`               | `¥15,002`       |
+
+One function was exponent-aware and three were not, so **the display was right and the stored
+number was wrong** — the direction that hides longest, because the number on screen looks fine
+until you compare it against the receipt. The parser hardcoded `× 100` for every currency, and
+`convertCents` multiplied minor units by a rate quoted in whole units, which is only correct
+when both currencies happen to share an exponent. Nine of the ten do.
+
+The fix is to make the currency an argument everywhere it was assumed:
+`parseAmountToMinorUnits(input, currency)`, `minorUnitsToDecimalString(amount, currency)`, and
+`convertMinorUnits(amount, rate, from, to)` — which rescales by both exponents, so JPY→USD
+multiplies by a hundred and BRL→USD does not. The names changed with the signatures: a function
+called `parseAmountToCents` invites exactly the assumption that broke it.
+
+The receipt reader had the same latent bug and now reads the currency off the document before
+scaling the amount, rather than after.
 
 ### Three languages, no i18n library
 
@@ -621,7 +678,7 @@ imply thinking in reais.
 Ten functions mean ten independent cold starts and ten things to keep warm. One function
 concentrates traffic and keeps both the container and the Mongo connection hot. The cost is
 granularity — scaling and IAM are per-API rather than per-route — which for ten routes in one
-domain is the right trade. It is also what makes the local dev server possible with *exactly*
+domain is the right trade. It is also what makes the local dev server possible with _exactly_
 the same code.
 
 ### CloudFront serves the API under the site's own host
@@ -651,6 +708,30 @@ month-boundary bug.
 The Zod schemas are imported by the React forms **and** by the API handlers. "A password is at
 least 10 characters" exists once. Client-side validation is a courtesy (instant feedback);
 the server runs the same schema again in `parseInput`, which is the actual boundary.
+
+### A handler never opens a collection
+
+Every route handler takes its persistence as an argument. `requireAuth` builds a `Repositories`
+bundle bound to the caller's id and attaches it to the request, so a handler says
+`request.repos.expenses.list(...)` and cannot express "any user's expenses" — the scope is
+closed over before the handler is entered. `findOneAndUpdate({ _id, userId })` lives in one
+place per collection rather than at every call site.
+
+The point is testability as much as safety. Handlers are exercised against an in-memory
+implementation of the same interface, with no database and no container, in milliseconds — see
+[Testing](#testing).
+
+Two things sit outside the user-scoped bundle, deliberately:
+
+- **`AccountRepository`** is unscoped, because sign-up and log-in run before there is a user to
+  scope to. It exposes exactly `findByEmail` and `create`; nothing else can reach the `users`
+  collection.
+- **`RateRepository`** is on the bundle but is not filtered by user, because an exchange rate is
+  not personal data — USD→BRL on a given date is the same fact for everyone, and storing a copy
+  per account would multiply both the rows and the upstream calls.
+
+`lib/rates.ts` therefore takes a `RateRepository` rather than importing the Mongo client, which
+is what makes the "no rate, no guess" behaviour below testable at all.
 
 ### scrypt from `node:crypto` for passwords
 
@@ -713,11 +794,11 @@ straight into an `<svg>` of our own and both runtime packages come out of `packa
 artwork, same package, same upstream updates, for **+2.4 KB gzipped** instead of 27 - measured
 from the production bundle both ways:
 
-| | Bundle (raw) | Bundle (gzip) |
-| --- | --- | --- |
-| Hand-drawn paths | 373.4 KB | 112.6 KB |
-| Font Awesome, with its runtime | 472.7 KB | 139.8 KB |
-| Font Awesome, paths only | **379.3 KB** | **115.0 KB** |
+|                                | Bundle (raw) | Bundle (gzip) |
+| ------------------------------ | ------------ | ------------- |
+| Hand-drawn paths               | 373.4 KB     | 112.6 KB      |
+| Font Awesome, with its runtime | 472.7 KB     | 139.8 KB      |
+| Font Awesome, paths only       | **379.3 KB** | **115.0 KB**  |
 
 ### One chart, one colour
 
@@ -726,6 +807,45 @@ and the category name is already on the axis. Colouring each bar differently wou
 single series — more visual load, no extra information, and a legend that repeats the axis.
 
 ---
+
+### One layout, two shapes
+
+The sidebar is the navigation on a desktop and does not exist on a phone: below `md` it is
+`display: none` and a sticky top bar takes over, carrying the brand, sign-out, the view tabs,
+and the language and currency selects.
+
+That last part was a real bug rather than a styling choice. `Preferences` lived only inside the
+sidebar, so on a phone there was **no way to change language or display currency at all** — the
+two settings this app is largely about. It now renders in both places from one component, in a
+compact two-select form inline and the labelled form in the sidebar.
+
+Everything else is fluid: the stat row scrolls horizontally with snap points instead of
+wrapping into a cramped grid, the form/chart pair collapses from two columns to one at `lg`,
+and the expense table's wide content scrolls inside its own container so the page body never
+does.
+
+---
+
+### Renaming and removing a category, and the one that cannot be
+
+A category people cannot rename is a typo they have to live with, so `PATCH /categories/:id`
+exists. Deleting is the harder half, and the answer is a refusal: `DELETE` returns **409 with
+the expense count** when anything still points at the category.
+
+The two alternatives are both worse. Cascading the delete destroys expenses the user never
+asked to lose. Reassigning them to `Other` silently rewrites history - last month's report
+changes because of an edit made today, and nothing in the UI ever said so. Refusing is the only
+answer that loses no data, and the count is in the message because "it is in use" leaves the
+user with no idea what to do next. The budget row _does_ go with the category, because a limit
+on a category that no longer exists is not data, it is a leak.
+
+**`Other` is exempt from both.** It is not just another row: `categorize.ts` falls back to it
+when no rule and no model answer fits, and the receipt prompt names it as the value to use when
+nothing matches. Renaming or removing it would break those paths quietly - the enum handed to
+the model is built from the user's real categories, so the instruction "choose Other" would
+simply stop having a referent. The API enforces that with a 403 rather than trusting the UI to
+hide the buttons, which is the same reasoning as every other rule in this codebase: the client
+is a convenience, not a control.
 
 ### Budgets per category
 
@@ -775,16 +895,16 @@ into a file that outlives it.
 
 Mapped to the OWASP Top 10 items this application actually touches.
 
-| Concern | How it is handled |
-|---|---|
-| **A01 Broken access control** | The auth middleware proves *who*, never *what they may touch*. Every query filters on `userId` — `findOneAndUpdate({ _id, userId })`, not `{ _id }` — so another user's expense is a 404, not a silent success. Creating an expense also verifies the `categoryId` belongs to the caller. Verified end to end with a two-user probe. |
-| **A02 Cryptographic failures** | scrypt with a per-password salt and `timingSafeEqual`. JWTs signed HS256 via `jose` with the algorithm **pinned** on verify, which closes the `alg: none` / algorithm-confusion door (there is a test that forges one). |
-| **A03 Injection** | No string-built queries. Every id passes `ObjectId.isValid` before reaching a filter. React escapes on render and `dangerouslySetInnerHTML` appears nowhere. |
-| **A04 Insecure design** | `sanitizeText` normalises stored text; it is explicitly *not* the XSS defence — escaping belongs to rendering, and escaping here would corrupt the stored description. |
-| **A04 File upload** | The browser's `Content-Type` is a claim, so it is never trusted: `lib/files.ts` sniffs the actual magic bytes, and the *sniffed* type is what reaches the model, what gets stored, and what a browser is later told to render. Size is checked *before* decoding, from the base64 length, so a hostile payload is rejected without ever being materialised. A renamed `.exe` is refused — there is a test for exactly that. Stored receipts are served with `X-Content-Type-Options: nosniff` and scoped by `userId`; another account's receipt is a 404. |
-| **A05 Security misconfiguration** | Unexpected errors return a generic 500 body; detail goes to the log only. The S3 bucket blocks all public access and is reachable solely through CloudFront OAC. CORS is an explicit allowlist, never `*`. |
-| **A07 Auth failures** | Login answers identically for "unknown email" and "wrong password", and burns a throwaway scrypt on the unknown-email path so the two cannot be told apart by timing. Password minimum is length-based (NIST SP 800-63B) with an upper bound, since scrypt runs inside the Lambda. |
-| **A09 Logging failures** | Structured JSON logs, one line per request. **No request body is ever logged** — the auth routes carry a plaintext password, and "we only log the interesting ones" is the rule someone forgets under pressure. |
+| Concern                           | How it is handled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A01 Broken access control**     | The auth middleware proves _who_, never _what they may touch_. Every query filters on `userId` — `findOneAndUpdate({ _id, userId })`, not `{ _id }` — so another user's expense is a 404, not a silent success. Creating an expense also verifies the `categoryId` belongs to the caller. Verified end to end with a two-user probe.                                                                                                                                                                                                                      |
+| **A02 Cryptographic failures**    | scrypt with a per-password salt and `timingSafeEqual`. JWTs signed HS256 via `jose` with the algorithm **pinned** on verify, which closes the `alg: none` / algorithm-confusion door (there is a test that forges one).                                                                                                                                                                                                                                                                                                                                   |
+| **A03 Injection**                 | No string-built queries. Every id passes `ObjectId.isValid` before reaching a filter. React escapes on render and `dangerouslySetInnerHTML` appears nowhere.                                                                                                                                                                                                                                                                                                                                                                                              |
+| **A04 Insecure design**           | `sanitizeText` normalises stored text; it is explicitly _not_ the XSS defence — escaping belongs to rendering, and escaping here would corrupt the stored description.                                                                                                                                                                                                                                                                                                                                                                                    |
+| **A04 File upload**               | The browser's `Content-Type` is a claim, so it is never trusted: `lib/files.ts` sniffs the actual magic bytes, and the _sniffed_ type is what reaches the model, what gets stored, and what a browser is later told to render. Size is checked _before_ decoding, from the base64 length, so a hostile payload is rejected without ever being materialised. A renamed `.exe` is refused — there is a test for exactly that. Stored receipts are served with `X-Content-Type-Options: nosniff` and scoped by `userId`; another account's receipt is a 404. |
+| **A05 Security misconfiguration** | Unexpected errors return a generic 500 body; detail goes to the log only. The S3 bucket blocks all public access and is reachable solely through CloudFront OAC. CORS is an explicit allowlist, never `*`.                                                                                                                                                                                                                                                                                                                                                |
+| **A07 Auth failures**             | Login answers identically for "unknown email" and "wrong password", and burns a throwaway scrypt on the unknown-email path so the two cannot be told apart by timing. Password minimum is length-based (NIST SP 800-63B) with an upper bound, since scrypt runs inside the Lambda.                                                                                                                                                                                                                                                                        |
+| **A09 Logging failures**          | Structured JSON logs, one line per request. **No request body is ever logged** — the auth routes carry a plaintext password, and "we only log the interesting ones" is the rule someone forgets under pressure.                                                                                                                                                                                                                                                                                                                                           |
 
 ### Known trade-off: token storage
 
@@ -810,33 +930,35 @@ trial.
 ## Testing
 
 ```bash
-pnpm test        # 158 unit tests
-pnpm typecheck   # tsc --noEmit across every package
-pnpm lint        # eslint
-pnpm check       # all three
+pnpm test          # 226 unit tests
+pnpm typecheck     # tsc --noEmit across every package
+pnpm lint          # eslint, including react-hooks on apps/web
+pnpm format:check  # prettier
+pnpm check         # all four
 ```
 
 Tests target the parts where a bug is silent and expensive:
 
-- **The AI cascade** — that a rule short-circuits *without calling the model* (that assertion
-  is the cost story), that a fallback is not cached, that an off-list answer is refused, and
-  that a suggestion is never a category the user does not have.
+- **The AI cascade** — that a rule short-circuits _without calling the model_ (that assertion
+  is the cost story), that a stalled provider cannot eat the whole budget and starve the next
+  one, that an off-list answer is refused, and that a suggestion is never a category the user
+  does not have.
 - **Auth and crypto** — scrypt round-trip and salting, a tampered signature, an `alg: none`
   forgery, and every rejection path in `requireAuth`.
 - **Money** — including an explicit test that cents stay exact where floats drift.
 - **Report arithmetic** — totals, ordering, and the empty-month case.
 - **Routing and errors** — parameter extraction, that a dynamic segment cannot swallow extra
   path segments, and that an internal error message never reaches the response body.
-- **Config** — that every missing variable is reported at once, and that a *blank* value in
+- **Config** — that every missing variable is reported at once, and that a _blank_ value in
   `.env` counts as absent (the shape `.env.example` actually ships) — and the same rule on the
   frontend, where a blank `VITE_API_URL` must fall back to `/api` rather than to `""`.
-- **Uploads** — magic-byte sniffing for all four accepted types, a RIFF container that is *not*
+- **Uploads** — magic-byte sniffing for all four accepted types, a RIFF container that is _not_
   a WebP, a renamed executable, an oversized payload rejected before decoding, and the
   extraction parser dropping a malformed date, an unparseable amount, or a category the user
   does not have.
 - **The reader ladder** — that a healthy model is called exactly once, that a congested one
   reaches the fallback model, that a 400/401/403/404 is reported as `unavailable` rather than
-  blamed on the document, that a model finding nothing escalates to a *different* model but
+  blamed on the document, that a model finding nothing escalates to a _different_ model but
   never re-asks the same one, that `unreadable` is withheld when a model was never reached,
   and that pointing both model names at one model does not silently halve the ladder.
 - **What the user is told when it fails** — `describeFailure` is a pure function precisely so
@@ -846,15 +968,40 @@ Tests target the parts where a bug is silent and expensive:
   formula prefix (`=`, `+`, `-`, `@`, tab, CR) is defused so a spreadsheet renders it as text.
 - **Budgets** — that zero is accepted (it means "spend nothing here") while a negative, a
   fractional cent, a numeric string and a missing value are all refused.
-- **Currency** — that a round trip stays within one minor unit, that conversion rounds once
-  from the original rather than compounding, that a currency with no minor unit (JPY) is not
-  divided by 100, and that a BRL amount never renders with a bare `$`.
+- **Currency arithmetic** — that a round trip stays within one minor unit, that conversion
+  rounds once from the original rather than compounding, and that a BRL amount never renders
+  with a bare `$`.
+- **Minor units** — the regression tests for the bug in
+  [section 4 above](#4-a-minor-unit-is-not-always-a-hundredth--and-this-was-a-real-bug): that
+  `15000` typed against JPY stores 15,000 rather than 1,500,000, that a fraction of a yen is
+  refused, that a JPY→USD conversion rescales by both exponents instead of one, and that the
+  decimal round trip holds for a currency with no decimal point.
+- **Which rate, and what happens when there is none** — that a missing rate stays `undefined`
+  and never becomes a silent 1.0, that identity never leaves the process, that a stored rate is
+  reused instead of re-fetched, that a historical rate is frozen with no expiry while `latest`
+  carries one, and that two dates for one pair cannot share a cache entry.
+- **Sign-up and log-in** — the 409 on a duplicate email, the categories a new account is seeded
+  with, that the password never reaches storage in the clear, and that an unknown email and a
+  wrong password come back byte-identical.
+- **Translation keys** — that every key in `en` is actually reached from the UI. Seven were
+  not, and the types could not see it: `Dictionary` proves the three locales agree with each
+  other, never that anything renders them.
 
-Route handlers are covered indirectly, through the pure functions they compose, plus a manual
-end-to-end pass against an in-memory MongoDB (28 checks, including the cross-user access
-probes above). Wiring those into CI against `mongodb-memory-server` is listed below — it was
-left out of `pnpm test` on purpose, because it downloads a ~780 MB MongoDB binary on first
-run and the brief asks for a repo that is ready with minimal setup.
+Route handlers are exercised **directly**, against an in-memory stand-in for the repositories
+(`apps/api/tests/helpers/fake-repositories.ts`) — status codes, response shapes, which failure
+becomes which HTTP error, and the ordering of writes. None of that is reachable from a pure
+function.
+
+That was not possible while a handler opened a MongoDB collection itself, which is the reason
+the repository layer exists. Two places still bypassed it and were correspondingly untested:
+`routes/auth.ts` reached for `users` and `categories` directly, and `lib/rates.ts` for `rates`.
+Both now take their store as an argument — auth an unscoped `AccountRepository`, rates a
+`RateRepository` on `request.repos` — and both are covered above.
+
+On top of that sits a manual end-to-end pass against a real MongoDB (28 checks, including the
+cross-user access probes above). Wiring it into CI against `mongodb-memory-server` is listed
+below — it is out of `pnpm test` on purpose, because it downloads a ~780 MB MongoDB binary on
+first run and the brief asks for a repo that is ready with minimal setup.
 
 ---
 
@@ -865,8 +1012,14 @@ run and the brief asks for a repo that is ready with minimal setup.
 cd infra && npx cdk bootstrap
 
 # from the repo root
-pnpm deploy
+pnpm deploy:lambda   # what this account can run today - see the deploy note
+pnpm deploy          # the CloudFront variant, once AWS clears the account
 ```
+
+**Which one to run.** `pnpm deploy` builds the intended architecture: S3 + CloudFront in front
+of the API. A brand new AWS account cannot create a distribution until AWS verifies it, so
+`pnpm deploy:lambda` passes `-c lambdaOnly=true` and serves the site from the Lambda's own
+bundle instead. Identical application code; one flag between them.
 
 `pnpm deploy` builds the web bundle, then synthesises and deploys the stack. It reads the same
 root `.env`, and **aborts at synth time** with the list of what is missing rather than letting
@@ -882,6 +1035,16 @@ Nothing else to configure: `VITE_API_URL` is empty by default, so the bundle use
 same-origin `/api` path that CloudFront already routes.
 
 `pnpm destroy` tears the stack down, including the S3 bucket.
+
+**The CloudFront branch is asserted, not deployed.** `-c lambdaOnly=true` is what production
+runs, which leaves the S3 + CloudFront path as code no environment has exercised — the worst
+kind of code to keep, because nothing contradicts it. `infra/tests/stack.test.ts` synthesises
+both variants and pins the parts that would fail quietly rather than loudly: that `/api/*` uses
+the managed **caching-disabled** policy (a cached authorised `GET` would serve one user's data
+to another), that the prefix-stripping function is attached on _viewer-request_, that 403 and
+404 rewrite to `/index.html` for the client-side router, and that the bucket blocks all public
+access. Synthesising is not deploying — CloudFormation can still reject a valid template — but
+the branch is no longer unverified in shape.
 
 The Lambda runs with a **30-second timeout** — API Gateway's own integration ceiling. Receipt
 extraction takes 1–6 seconds healthy, but a congested free tier was measured at 17 s, and the
@@ -924,7 +1087,7 @@ the seed-list form of the URI, which needs only ordinary A-record lookups:
 mongodb://user:pass@host-00:27017,host-01:27017,host-02:27017/?ssl=true&authSource=admin&retryWrites=true&w=majority
 ```
 
-Atlas offers that string under *Connect → Drivers → older driver versions*. It works
+Atlas offers that string under _Connect → Drivers → older driver versions_. It works
 everywhere `mongodb+srv://` does, at the cost of breaking if Atlas ever moves the shard
 hostnames — so prefer SRV once the resolver is healthy.
 
@@ -941,14 +1104,19 @@ cluster's network access list — that is the usual culprit, and the error looks
 Almost always the same network-access list. The API creates its indexes on first use, so the
 very first request after a cold start is the one that surfaces a connectivity problem.
 
-**Login feels slow (~200 ms).**
-That is scrypt doing its job. It is deliberate, and it is why the Lambda is provisioned at
-512 MB — on Lambda, CPU scales with memory.
+**Login feels slow.**
+Measured against the deployed stack: **3.6 s cold, ~1.0 s warm.** Three things add up, in
+order of size — the Mongo connection (TLS plus replica-set discovery, and the Atlas cluster is
+not in the Lambda's region), scrypt (deliberate, and CPU-bound), and Node cold start parsing a
+2 MB bundle. Only the middle one is tunable from here, which is why the Lambda is provisioned
+at **1024 MB**: on Lambda, CPU scales with memory, and at 512 MB the hash had roughly a third
+of a core. The remaining fix is co-locating the cluster with the function; the bundle is a
+distant third and not worth splitting for.
 
 **Categorisation always answers `source: "fallback"` for unknown merchants.**
 Check that at least one of `GEMINI_API_KEY` / `GROQ_API_KEY` is set. Without either, the model
 steps are skipped by design; the API logs `aiEnabled: false` at startup and the dev server
-prints a warning. If a key *is* set, look for `ai provider failed` in the logs — it names the
+prints a warning. If a key _is_ set, look for `ai provider failed` in the logs — it names the
 provider and the status. A 429 or 503 there is free-tier congestion, which is exactly what the
 second provider and the fallback exist to absorb.
 
@@ -956,6 +1124,11 @@ second provider and the fallback exist to absorb.
 The current Flash models refuse a server-side deadline under ten seconds. That is why the
 Gemini client sets no `httpOptions.timeout` and the chain enforces its budget with an
 `AbortSignal` instead. Don't reintroduce the timeout option.
+
+**`'esbuild' is not recognized` during `cdk synth` or `pnpm deploy`.**
+CDK bundles the Lambda by shelling out to `pnpm exec esbuild` **from the workspace root**, not
+from `infra/`, so esbuild has to be resolvable there. It is a root `devDependency` for exactly
+that reason; a pnpm install that only placed it under `infra/` will fail at the bundling step.
 
 **`cdk deploy` fails with "SSM parameter /cdk-bootstrap/... not found".**
 The account/region has not been bootstrapped. Run `npx cdk bootstrap` from `infra/`.
@@ -979,24 +1152,21 @@ Roughly in the order I would actually pick them up:
    does not apply. This is the one genuine security improvement outstanding.
 2. **Integration tests in CI** against `mongodb-memory-server`, promoting the manual end-to-end
    pass into the suite.
-3. **Per-user rate limiting on `/ai/categorize`.** The cache and the rule pre-pass bound the
-   cost well in normal use; a hostile authenticated user is a different question, and the
-   free tier's quota is shared across every user of the deployment.
+3. **Per-user rate limiting on `/ai/categorize`.** The rule pre-pass bounds the cost well in
+   normal use — it answers every recurring merchant without a provider call — but a hostile
+   authenticated user is a different question, and the free tier's quota is shared across
+   every user of the deployment.
 4. **Secrets via SSM Parameter Store**, read at cold start, replacing the template-embedded
    environment variables.
 5. **Grow the rule table from real data.** Every `source: "model"` hit is a merchant the table
-   does not know. Logging the misses turns the cascade into something that gets *cheaper* the
+   does not know. Logging the misses turns the cascade into something that gets _cheaper_ the
    more it is used — the most valuable follow-up on this list.
-6. **Multi-currency.** Currency is fixed to USD in the formatter; the storage model (integer
-   minor units) already supports it, but the display layer and a per-user preference do not.
-   Receipt extraction already returns the printed currency and flags a mismatch, so the data is
-   there — what is missing is a per-user setting and rates from a source I would trust.
-7. **Move receipt storage to S3.** They currently sit in Mongo, which is fine at demo scale and
+6. **Move receipt storage to S3.** They currently sit in Mongo, which is fine at demo scale and
    wrong at any other — a 512 MB free cluster holds very few 4 MB documents. Presigned PUT and
    GET would lift both the storage ceiling and the 4 MB upload cap, at the cost of a bucket, a
    lifecycle policy and CORS on a second origin.
-7. **Pagination on `/expenses`.** It is capped at 200 rows today, which is honest but not a
-   long-term answer.
+7. **Pagination on `/expenses`.** The API accepts a `limit` up to 200 and the web app sends
+   none, so a list is 100 rows today. Honest, but not a long-term answer.
 
 ### Deliberately out of scope
 

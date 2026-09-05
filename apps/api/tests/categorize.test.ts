@@ -1,16 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PREDEFINED_CATEGORIES } from '@expense/shared';
-import { categorize, clearCategorizeCache } from '../src/ai/categorize.js';
+import { categorize } from '../src/ai/categorize.js';
 import { matchRule } from '../src/ai/rules.js';
 import { parseModelCategory, parseModelResponse } from '../src/ai/parse.js';
 import { firstAnswerFrom } from '../src/ai/providers/index.js';
 import type { Provider } from '../src/ai/providers/types.js';
 
 const CATEGORIES = [...PREDEFINED_CATEGORIES];
-
-beforeEach(() => {
-  clearCategorizeCache();
-});
 
 describe('matchRule', () => {
   it('matches a single-word merchant', () => {
@@ -58,8 +54,12 @@ describe('parseModelCategory', () => {
   });
 
   it('clamps a confidence outside 0..1 instead of trusting it', () => {
-    expect(parseModelCategory({ category: 'Dining', confidence: 7 }, CATEGORIES)?.confidence).toBe(1);
-    expect(parseModelCategory({ category: 'Dining', confidence: -2 }, CATEGORIES)?.confidence).toBe(0);
+    expect(parseModelCategory({ category: 'Dining', confidence: 7 }, CATEGORIES)?.confidence).toBe(
+      1,
+    );
+    expect(parseModelCategory({ category: 'Dining', confidence: -2 }, CATEGORIES)?.confidence).toBe(
+      0,
+    );
   });
 
   it('defaults a missing confidence rather than dropping a valid category', () => {
@@ -109,9 +109,13 @@ describe('categorize cascade', () => {
 
   it('asks the model only when no rule matches', async () => {
     const askModel = vi.fn().mockResolvedValue({ category: 'Housing', confidence: 0.7 });
-    const result = await categorize({ description: 'Quarterly payment to Vandelay Industries' }, CATEGORIES, {
-      askModel,
-    });
+    const result = await categorize(
+      { description: 'Quarterly payment to Vandelay Industries' },
+      CATEGORIES,
+      {
+        askModel,
+      },
+    );
 
     expect(askModel).toHaveBeenCalledOnce();
     expect(result).toEqual({ category: 'Housing', confidence: 0.7, source: 'model' });
@@ -119,38 +123,34 @@ describe('categorize cascade', () => {
 
   it('falls back gracefully when the model is unavailable', async () => {
     const askModel = vi.fn().mockResolvedValue(undefined);
-    const result = await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, { askModel });
+    const result = await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, {
+      askModel,
+    });
 
     expect(result).toEqual({ category: 'Other', confidence: 0, source: 'fallback' });
   });
 
-  it('does not cache a fallback, so the next attempt still tries the model', async () => {
+  it('retries the model after a fallback, rather than settling on it', async () => {
     const askModel = vi
       .fn()
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ category: 'Travel', confidence: 0.6 });
 
-    const first = await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, { askModel });
-    const second = await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, { askModel });
+    const first = await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, {
+      askModel,
+    });
+    const second = await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, {
+      askModel,
+    });
 
     expect(first.source).toBe('fallback');
     expect(second).toEqual({ category: 'Travel', confidence: 0.6, source: 'model' });
     expect(askModel).toHaveBeenCalledTimes(2);
   });
 
-  it('serves a repeated description from cache without a second call', async () => {
-    const askModel = vi.fn().mockResolvedValue({ category: 'Travel', confidence: 0.6 });
-
-    await categorize({ description: 'Zorblatt Industries' }, CATEGORIES, { askModel });
-    const second = await categorize({ description: '  zorblatt   INDUSTRIES ' }, CATEGORIES, { askModel });
-
-    expect(askModel).toHaveBeenCalledOnce();
-    expect(second.source).toBe('model');
-  });
-
   it('never suggests a category the user does not have', async () => {
     const askModel = vi.fn().mockResolvedValue({ category: 'Dining', confidence: 0.9 });
-    const limited = ['Groceries', 'Other'];
+    const limited = ['Food', 'Other'];
 
     // The rule would say "Dining" and so would the model - but this user does
     // not have that category, so the only valid answer is the fallback.
@@ -235,7 +235,9 @@ describe('firstAnswerFrom', () => {
     const stall = (name: string): Provider => ({
       name,
       ask: (_input, _categories, options) =>
-        new Promise((resolve) => options?.signal?.addEventListener('abort', () => resolve(undefined))),
+        new Promise((resolve) =>
+          options?.signal?.addEventListener('abort', () => resolve(undefined)),
+        ),
     });
     const never = vi.fn();
 

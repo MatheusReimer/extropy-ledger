@@ -1,11 +1,3 @@
-/**
- * The currencies the app knows about.
- *
- * Deliberately a short list rather than all of ISO 4217: every entry has to be
- * covered by the rate source, and offering a currency that silently fails to
- * convert is worse than not offering it. These are all published by the ECB via
- * Frankfurter.
- */
 export const CURRENCIES = [
   'USD',
   'EUR',
@@ -21,19 +13,11 @@ export const CURRENCIES = [
 
 export type CurrencyCode = (typeof CURRENCIES)[number];
 
-/**
- * Everything is measured against USD internally.
- *
- * Reports need a single unit to add up in, and picking one at write time is what
- * keeps the aggregation a plain `$sum` in the database rather than a per-row
- * conversion in Node.
- */
 export const BASE_CURRENCY: CurrencyCode = 'USD';
 
 export const isCurrency = (value: string): value is CurrencyCode =>
   (CURRENCIES as readonly string[]).includes(value);
 
-/** Shown next to the code in pickers, so the choice does not require memorising ISO. */
 export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
   USD: 'US Dollar',
   EUR: 'Euro',
@@ -47,43 +31,46 @@ export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
   SEK: 'Swedish Krona',
 };
 
-/**
- * Applies a rate to an integer minor-unit amount.
- *
- * Rounds once, at the end, and only ever from the original - never from an
- * already-converted value. Chaining conversions compounds the rounding error,
- * and on money that error is visible.
- */
-export function convertCents(cents: number, rate: number): number {
-  return Math.round(cents * rate);
-}
+const digitsByCurrency = new Map<string, number>();
 
 /**
- * Formats in the given currency and locale.
- *
- * `Intl` knows that JPY has no minor units and that pt-BR writes `R$ 1.234,56`,
- * so none of that is hardcoded here. Passing the currency explicitly - rather
- * than defaulting to USD as this used to - is what stops a Brazilian receipt
- * being displayed with a dollar sign.
+ * How many decimal places the currency has. Two for most, zero for JPY.
+ * Read from `Intl` rather than a table of our own, so the answer matches the
+ * one the formatter will use.
  */
-export function formatMoney(cents: number, currency: string, locale = 'en-US'): string {
-  const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency });
-  // `resolvedOptions` reports the real minor-unit count: JPY is 0, most are 2.
-  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-  return formatter.format(cents / 10 ** digits);
+export function minorUnitDigits(currency: string): number {
+  const cached = digitsByCurrency.get(currency);
+  if (cached !== undefined) return cached;
+
+  const digits =
+    new Intl.NumberFormat('en-US', { style: 'currency', currency }).resolvedOptions()
+      .maximumFractionDigits ?? 2;
+  digitsByCurrency.set(currency, digits);
+  return digits;
 }
 
+export const minorUnitScale = (currency: string): number => 10 ** minorUnitDigits(currency);
+
 /**
- * The languages the interface is translated into.
+ * Convert minor units of one currency into minor units of another.
  *
- * Kept beside the currencies because they travel together: a locale drives both
- * the wording and how `Intl` writes a number, so pt-BR gets "R$ 1.234,56" for
- * free rather than through a special case.
+ * `rate` is quoted in whole currency UNITS, which is why the two scales have to
+ * appear: 15000 minor units of JPY is 15000 yen, and at 0.0063 that is 94.5
+ * dollars, which is 9450 minor units of USD - not 94.
  */
+export function convertMinorUnits(amount: number, rate: number, from: string, to: string): number {
+  return Math.round((amount * rate * minorUnitScale(to)) / minorUnitScale(from));
+}
+
+export function formatMoney(amount: number, currency: string, locale = 'en-US'): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(
+    amount / minorUnitScale(currency),
+  );
+}
+
 export const LOCALES = ['en', 'pt', 'es'] as const;
 export type Locale = (typeof LOCALES)[number];
 
-/** BCP 47 tags for `Intl`, which needs a region to format money correctly. */
 export const LOCALE_TAGS: Record<Locale, string> = {
   en: 'en-US',
   pt: 'pt-BR',

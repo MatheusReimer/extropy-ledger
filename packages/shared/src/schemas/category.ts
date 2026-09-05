@@ -12,4 +12,9 @@ export const createCategorySchema = z.object({
   name: categoryNameSchema,
 });
 
+export const renameCategorySchema = z.object({
+  name: categoryNameSchema,
+});
+
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
+export type RenameCategoryInput = z.infer<typeof renameCategorySchema>;

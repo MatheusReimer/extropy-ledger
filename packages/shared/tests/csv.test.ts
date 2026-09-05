@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeCsvValue, toCsv } from './csv.js';
+import { escapeCsvValue, toCsv } from '../src/csv.js';
 
 describe('escapeCsvValue', () => {
   it('quotes everything, so there is one rule rather than a list of exceptions', () => {
@@ -32,7 +32,7 @@ describe('escapeCsvValue', () => {
   });
 
   it('leaves an ordinary leading character alone', () => {
-    expect(escapeCsvValue('Groceries')).toBe('"Groceries"');
+    expect(escapeCsvValue('Food')).toBe('"Food"');
     // A negative amount is the interesting case: it legitimately starts with `-`,
     // so it is defused too. Correctness beats tidiness - the cell still reads
     // as -12.50, and a spreadsheet that evaluated it would show the same number.

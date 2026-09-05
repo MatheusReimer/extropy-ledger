@@ -1,10 +1,5 @@
 import { z } from 'zod';
 
-/**
- * Password rules are deliberately plain: a high minimum length is worth more
- * than demanding symbols (NIST SP 800-63B). The upper bound exists because
- * scrypt runs inside the Lambda — unbounded input would be a cheap DoS vector.
- */
 export const passwordSchema = z
   .string()
   .min(10, 'Password must be at least 10 characters')

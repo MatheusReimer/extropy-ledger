@@ -8,10 +8,6 @@ export type RouteMatch = {
   readonly params: Record<string, string>;
 };
 
-/**
- * What an adapter hands over: everything except the parsed body and the path
- * params, both of which the dispatcher produces.
- */
 export type IncomingRequest = Omit<HttpRequest, 'body' | 'params'> & {
   readonly rawBody: string | undefined;
 };
@@ -20,13 +16,6 @@ export type Dispatcher = (request: IncomingRequest) => Promise<HttpResponse>;
 
 const splitPath = (path: string): string[] => path.split('/').filter(Boolean);
 
-/**
- * Pure route matching - no state, no I/O, no framework.
- *
- * An Express instance for ten routes would drag middleware, a body parser and a
- * mutable req/res model into a Lambda that already receives a fully-formed
- * event. Sixty lines cost less than the dependency.
- */
 export function matchRoute(
   routes: readonly Route[],
   method: string,
@@ -57,19 +46,6 @@ export function matchRoute(
   return undefined;
 }
 
-/**
- * Closes the route table into a single function, with the error boundary built in.
- *
- * This is the only place on the backend that catches a generic exception:
- * handlers throw `HttpError` and let anything unexpected bubble, because
- * try/catch in every route is exactly how a handler ends up swallowing a real
- * bug and returning 200.
- *
- * JSON parsing happens INSIDE that boundary rather than in the adapters. When it
- * lived in the adapters, a curl with a trailing comma escaped this catch and got
- * logged as a 500-level error with a stack trace - a client mistake raising an
- * operational alarm.
- */
 export function createDispatcher(routes: readonly Route[]): Dispatcher {
   return async (incoming: IncomingRequest): Promise<HttpResponse> => {
     const started = Date.now();
@@ -99,8 +75,6 @@ export function createDispatcher(routes: readonly Route[]): Dispatcher {
         route: match?.route.path ?? incoming.path,
         status: response.status,
         durationMs: Date.now() - started,
-        // A stack trace only helps for a bug. On an expected 4xx it is noise
-        // that makes the log harder to read, not easier.
         ...(error instanceof HttpError ? { code: error.code } : describeError(error)),
       });
       return response;

@@ -1,52 +1,73 @@
 import { describe, expect, it } from 'vitest';
-import { centsToDecimalString, formatCents, parseAmountToCents } from './money.js';
-import { sanitizeText } from './sanitize.js';
-import { createExpenseSchema, listExpensesQuerySchema } from './schemas/expense.js';
-import { signupSchema } from './schemas/auth.js';
-import { parseOrFieldErrors } from './validation.js';
+import { minorUnitsToDecimalString, parseAmountToMinorUnits } from '../src/money.js';
+import { sanitizeText } from '../src/sanitize.js';
+import { createExpenseSchema, listExpensesQuerySchema } from '../src/schemas/expense.js';
+import { signupSchema } from '../src/schemas/auth.js';
+import { parseOrFieldErrors } from '../src/validation.js';
 
-describe('parseAmountToCents', () => {
+describe('parseAmountToMinorUnits', () => {
   it('parses whole and decimal amounts', () => {
-    expect(parseAmountToCents('12')).toBe(1_200);
-    expect(parseAmountToCents('12.5')).toBe(1_250);
-    expect(parseAmountToCents('12.34')).toBe(1_234);
+    expect(parseAmountToMinorUnits('12')).toBe(1_200);
+    expect(parseAmountToMinorUnits('12.5')).toBe(1_250);
+    expect(parseAmountToMinorUnits('12.34')).toBe(1_234);
   });
 
   it('accepts a comma as the decimal separator', () => {
-    expect(parseAmountToCents('12,34')).toBe(1_234);
+    expect(parseAmountToMinorUnits('12,34')).toBe(1_234);
   });
 
   /**
-   * Why cents exist at all: 0.1 + 0.2 is not 0.3 in binary floating point.
-   * Adding expenses as decimals accumulates error that surfaces in the month total.
+   * Why minor units exist at all: 0.1 + 0.2 is not 0.3 in binary floating
+   * point. Adding expenses as decimals accumulates error that surfaces in the
+   * month total.
    */
   it('keeps sums exact where floating point would drift', () => {
-    const cents = [0.1, 0.2, 0.3].map((value) => parseAmountToCents(value) ?? 0);
-    expect(cents.reduce((sum, value) => sum + value, 0)).toBe(60);
+    const amounts = [0.1, 0.2, 0.3].map((value) => parseAmountToMinorUnits(value) ?? 0);
+    expect(amounts.reduce((sum, value) => sum + value, 0)).toBe(60);
     expect(0.1 + 0.2 + 0.3).not.toBe(0.6);
   });
 
   it('rejects anything that is not a plain amount', () => {
     for (const input of ['', 'abc', '-5', '1.234', '1e5', '  ']) {
-      expect(parseAmountToCents(input)).toBeNull();
+      expect(parseAmountToMinorUnits(input)).toBeNull();
     }
+  });
+
+  /**
+   * The bug this signature exists to stop. Typing 15000 with JPY selected used
+   * to store 1,500,000 - the parser multiplied by a hundred for every currency,
+   * while the formatter correctly divided by one for yen. The amount came back
+   * a hundred times too large.
+   */
+  it('does not invent minor units for a currency that has none', () => {
+    expect(parseAmountToMinorUnits('15000', 'JPY')).toBe(15_000);
+    expect(parseAmountToMinorUnits('15000', 'USD')).toBe(1_500_000);
+  });
+
+  it('refuses a fraction of a yen', () => {
+    expect(parseAmountToMinorUnits('150.50', 'JPY')).toBeNull();
+    expect(parseAmountToMinorUnits('150.5', 'JPY')).toBeNull();
   });
 });
 
-describe('centsToDecimalString', () => {
-  it('always pads to two decimals', () => {
-    expect(centsToDecimalString(1_200)).toBe('12.00');
-    expect(centsToDecimalString(5)).toBe('0.05');
+describe('minorUnitsToDecimalString', () => {
+  it('pads to two decimals for a currency that has them', () => {
+    expect(minorUnitsToDecimalString(1_200)).toBe('12.00');
+    expect(minorUnitsToDecimalString(5)).toBe('0.05');
   });
 
-  it('round-trips through parseAmountToCents', () => {
-    for (const cents of [1, 99, 100, 123_456]) {
-      expect(parseAmountToCents(centsToDecimalString(cents))).toBe(cents);
+  it('writes no decimal point for a currency without one', () => {
+    expect(minorUnitsToDecimalString(15_000, 'JPY')).toBe('15000');
+  });
+
+  it('round-trips through parseAmountToMinorUnits', () => {
+    for (const currency of ['USD', 'JPY']) {
+      for (const amount of [1, 99, 100, 123_456]) {
+        expect(parseAmountToMinorUnits(minorUnitsToDecimalString(amount, currency), currency)).toBe(
+          amount,
+        );
+      }
     }
-  });
-
-  it('formats as currency for display', () => {
-    expect(formatCents(1_234)).toBe('$12.34');
   });
 });
 
@@ -75,7 +96,10 @@ describe('sanitizeText', () => {
 
 describe('shared schemas', () => {
   it('normalises the email to lowercase on signup', () => {
-    const result = signupSchema.safeParse({ email: '  USER@Example.COM ', password: 'longenough1' });
+    const result = signupSchema.safeParse({
+      email: '  USER@Example.COM ',
+      password: 'longenough1',
+    });
     expect(result.success && result.data.email).toBe('user@example.com');
   });
 

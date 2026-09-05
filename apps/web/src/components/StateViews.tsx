@@ -1,15 +1,9 @@
-import { Alert, Box, Center, Spinner, Stack, Text } from '@chakra-ui/react';
+import { Alert, Box, Center, HStack, Spinner, Stack, Text } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
 import { ApiError } from '../api/client';
+import { InfoIcon } from './icons';
 import { useT } from '../i18n';
 
-/**
- * The three states of any read, in one place.
- *
- * "Loading and error states throughout" only actually happens if reaching for
- * the ready-made component is easier than hand-writing `{isLoading && ...}` -
- * otherwise the third screen always forgets the error case.
- */
 export function LoadingState({ label }: { label?: string }) {
   const t = useT();
   return (
@@ -22,7 +16,6 @@ export function LoadingState({ label }: { label?: string }) {
   );
 }
 
-/** Translates the error into something actionable - "try again" alone helps nobody. */
 type Translate = ReturnType<typeof useT>;
 
 function describe(error: unknown, t: Translate): { title: string; hint: string } {
@@ -33,8 +26,6 @@ function describe(error: unknown, t: Translate): { title: string; hint: string }
     if (error.status === 401) {
       return { title: t('error.expired'), hint: t('error.expiredHint') };
     }
-    // The server's message is already user-facing and already specific; a
-    // translated generic would be less useful than the untranslated truth.
     return { title: error.message, hint: t('error.retryHint') };
   }
   return { title: t('error.generic'), hint: t('error.genericHint') };
@@ -67,5 +58,28 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
         </Text>
       ) : null}
     </Stack>
+  );
+}
+
+export function Notice({ children }: { children: ReactNode }) {
+  return (
+    <HStack
+      gap="2.5"
+      align="flex-start"
+      borderWidth="1px"
+      borderColor="border"
+      borderRadius="card"
+      bg="bg.subtle"
+      px="4"
+      py="3"
+      role="status"
+    >
+      <Box color="fg.subtle" mt="0.5">
+        <InfoIcon size={15} />
+      </Box>
+      <Text fontSize="sm" color="fg.muted">
+        {children}
+      </Text>
+    </HStack>
   );
 }

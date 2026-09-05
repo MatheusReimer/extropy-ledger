@@ -58,9 +58,9 @@ describe('resolveCorsHeaders', () => {
   const allowed = ['https://app.example.com'];
 
   it('echoes an allowed origin', () => {
-    expect(resolveCorsHeaders('https://app.example.com', allowed)['Access-Control-Allow-Origin']).toBe(
-      'https://app.example.com',
-    );
+    expect(
+      resolveCorsHeaders('https://app.example.com', allowed)['Access-Control-Allow-Origin'],
+    ).toBe('https://app.example.com');
   });
 
   it('refuses an origin that is not on the allowlist', () => {
@@ -86,7 +86,9 @@ describe('buildConfig', () => {
   });
 
   it('rejects a JWT secret that is too short to be safe', () => {
-    expect(() => buildConfig({ MONGODB_URI: 'mongodb://x', JWT_SECRET: 'short' })).toThrow(ConfigError);
+    expect(() => buildConfig({ MONGODB_URI: 'mongodb://x', JWT_SECRET: 'short' })).toThrow(
+      ConfigError,
+    );
   });
 
   it('treats the AI key as optional so the app runs without it', () => {
@@ -135,14 +137,19 @@ describe('monthly summary', () => {
    * silently.
    */
   it('reports how many expenses could not be converted', () => {
-    const summary = buildSummary('2026-09', [{ categoryId: 'a', totalCents: 100, count: 1 }], new Map(), 2);
+    const summary = buildSummary(
+      '2026-09',
+      [{ categoryId: 'a', totalCents: 100, count: 1 }],
+      new Map(),
+      2,
+    );
     expect(summary.unconvertedCount).toBe(2);
     expect(summary.totalCents).toBe(100);
   });
 
   it('totals, counts and sorts by spend descending', () => {
     const names = new Map([
-      ['a', 'Groceries'],
+      ['a', 'Food'],
       ['b', 'Dining'],
     ]);
     const summary = buildSummary(
@@ -156,7 +163,7 @@ describe('monthly summary', () => {
 
     expect(summary.totalCents).toBe(5_550);
     expect(summary.expenseCount).toBe(5);
-    expect(summary.byCategory.map((item) => item.name)).toEqual(['Dining', 'Groceries']);
+    expect(summary.byCategory.map((item) => item.name)).toEqual(['Dining', 'Food']);
   });
 
   /**
@@ -164,7 +171,11 @@ describe('monthly summary', () => {
    * would stop adding up to the total printed above them.
    */
   it('keeps a row whose category name is unknown', () => {
-    const summary = buildSummary('2026-09', [{ categoryId: 'gone', totalCents: 500, count: 1 }], new Map());
+    const summary = buildSummary(
+      '2026-09',
+      [{ categoryId: 'gone', totalCents: 500, count: 1 }],
+      new Map(),
+    );
     expect(summary.byCategory[0]?.name).toBe('Unknown');
     expect(summary.totalCents).toBe(500);
   });
