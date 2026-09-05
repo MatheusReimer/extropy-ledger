@@ -153,3 +153,25 @@ always typed by hand: the receipt reader writes them from whatever the model saw
 quotes every field unconditionally, and doubles embedded quotes. Amounts are exported **as
 spent**, with the currency in its own column - a single converted column would bake today's rate
 into a file that outlives it.
+
+---
+
+## What was deliberately left out
+
+Two things a reader might expect and not find. Both absences are decisions, and stating them
+plainly is worth more than letting someone wonder whether they were forgotten.
+
+A **conversational assistant** ("what were my top categories last month?") was cut, and the cut
+is the point rather than an omission. It would have meant streaming, context injection and a
+much larger prompt surface — and for the questions this app actually answers, the report
+endpoint gives an exact number instantly, for free, and with no hallucination risk. The
+judgement the brief asks for is knowing where an LLM adds value and where it adds latency and
+cost on top of a `$group` query. Categorisation is the former; summing a column is the latter.
+
+**No password reset.** The brief asks for sign-up, log-in and JWT auth, and this is none of
+those — but it is the first thing a real deployment would need, so it is worth being explicit
+rather than silent. A half-built one would be worse than none: any reset that does not actually
+deliver a secret to an inbox is an account-takeover feature wearing a helpful label. Delivery is
+the real blocker, since SES starts every account in a sandbox that only sends to pre-verified
+addresses. It would need a single-use token stored hashed, a fifteen-to-thirty-minute expiry,
+invalidation on use, and every existing session revoked on success.
